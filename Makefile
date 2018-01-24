@@ -1,4 +1,4 @@
-CXXFLAGS=-g -O2
+CXXFLAGS=-g -O2 -fopenmp
 LDFLAGS=-lm
 
 time_math2: time_math2.o
