@@ -18,14 +18,18 @@
 unsigned iterations=100000;
 unsigned cases=20000;
 unsigned num_sets=5000;
+unsigned samplerate=1000;
 bool nonnormals=false;
+
+std::vector< double> numbers;
 
 static void random_spray(std::vector<struct range> &ranges);
 static void targeted_walk( const std::vector< double> &numbers,
 			   std::vector<struct range> &ranges);
-static void range_sort(std::vector< std::pair<double,uint64_t> > &results,
-		       std::vector<struct range> &ranges);
-  
+static unsigned range_sort(std::vector< std::pair<double,uint64_t> > &results,
+			   std::vector<struct range> &ranges);
+static void setup_ranges( std::vector<struct range> &ranges);
+
 static inline void Gettimeofday(struct timeval &ts){
   if (gettimeofday (&ts, NULL) != 0) {
     fprintf (stderr, "Unable to get time of day, exiting\n");
@@ -71,6 +75,7 @@ int main(int argc, char **argv)
   int digit_optind = 0;
   bool randspray=false;
   bool targeted=false;
+  bool dumpnums=true;
   
   while (c!=-1) {
     int this_option_optind = optind ? optind : 1;
@@ -82,10 +87,12 @@ int main(int argc, char **argv)
       {"sets",           required_argument, 0, 's'},
       {"cases",          required_argument, 0, 'c'},
       {"nonnormals",     no_argument,       0, 'n'},
+      {"dumpnumbers",    no_argument,       0, 'd'},
+      {"samplerate",     required_argument, 0, 'h'},
       {0,                0,                 0,  0 }
     };
 
-    c = getopt_long(argc, argv, "icnrst",
+    c = getopt_long(argc, argv, "icdhnrst",
 		    long_options, &option_index);
     switch (c) {
     case -1:
@@ -105,8 +112,14 @@ int main(int argc, char **argv)
     case 't':
       targeted=true;
       break;
+    case 'd':
+      dumpnums=true;
+      break;
     case 'c':
       sscanf(optarg,"%ld",&cases);
+      break;
+    case 'h':
+      sscanf(optarg,"%ld",&samplerate);
       break;
     default:
       exit(1);
@@ -117,7 +130,6 @@ int main(int argc, char **argv)
   // TODO: some error handling here
   std::string line;
 
-  std::vector< double> numbers;
   while (std::getline(infile, line)){
     if(line[0]=='#')
       continue;
@@ -126,68 +138,25 @@ int main(int argc, char **argv)
     if(isnormal(a) || nonnormals==true)
       numbers.push_back(a);
   }
-  
-  std::vector< std::pair<double,uint64_t> > results;
-  std::vector< std::pair<double,double> > sums;
-  pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-  for( auto num=numbers.begin(); num!=numbers.end();num++){
-    double b=*num;
-    //this overwrites the variable b with the sum
-    uint64_t time=time_exp(iterations, b);
 
-    pthread_mutex_lock(&mutex);
-    results.push_back(std::pair<double,uint64_t>(*num,time));
-    sums.push_back(std::pair<double,double>(*num,b));
-    pthread_mutex_unlock(&mutex);
-  }
-
-  std::sort(results.begin(), results.end(),
-	    [](auto &left, auto &right) { return left.second < right.second; }
-	    );
-
-  unsigned count=1;
-  unsigned sum=results[0].second,begin=0;
   std::vector<struct range> ranges;
-  for( unsigned i=1;i<results.size()-1;i++){ // intentionally starts at 1
-    auto lowgap=results[i].second-results[i-1].second;
-    auto highgap=results[i+1].second-results[i].second;
-    auto partmean=sum/count/20; // 20=5% which is arbitrary but works
-    if( (lowgap<=highgap && highgap<partmean) || lowgap<=partmean ) { 
-      count++;
-      sum+=results[i].second;
-    } else { // closer to next value
-      if(count>2)
-	//if it is this small it probably isn't a plateau it is a transition
-	ranges.push_back(range(begin,i-1,count,sum));
-      begin=i;
-      count=1;
-      sum=results[i].second;
-    }
-  }
-  ranges.push_back(range(begin,results.size()-1,count,sum));
-  
-  std::cout << std::endl << ranges.size() << " Ranges: " << std::endl;
-  for( auto it=ranges.begin();it!=ranges.end();it++){
-    std::cout << it->begin << '-' << it->end << " c:" << it->count << "\tm:"
-	      << it->sum/it->count << " \tr:" << results[it->begin].second
-	      << ':' << results[it->end].second << ' '
-	      << double(results[it->end].second-results[it->begin].second)/it->count
-	      << std::endl;
-    it->count=0;
-    it->min=results[it->begin].second;
-    it->max=results[it->end].second;
-  }
-
+  setup_ranges( ranges);
+    
   if(randspray)
     random_spray( ranges);
   if(targeted)
     targeted_walk( numbers, ranges);
+  if(dumpnums){
+    std::cout << "---------" << std::endl << std::hexfloat;
+    for( auto num=numbers.begin(); num!=numbers.end();num++)
+      std::cout << *num << std::endl;
+  }
 }
 
 // this test is too random and really only seemed to pick out the denormals
 void random_spray(std::vector<struct range> &ranges){
   pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-  std::vector< std::pair<double,uint64_t> > rand_results;
+  std::vector< std::pair<double,uint64_t> > results;
   
   for( int j=0;j<num_sets;j++){
 #pragma omp parallel for
@@ -207,12 +176,17 @@ void random_spray(std::vector<struct range> &ranges){
       double b=a;
       uint64_t time=time_exp(iterations, a);
       pthread_mutex_lock(&mutex);
-      rand_results.push_back(std::pair<double,uint64_t>(b, time));
+      results.push_back(std::pair<double,uint64_t>(b, time));
       pthread_mutex_unlock(&mutex);
     }
 
-    range_sort(rand_results,ranges);
-    rand_results.clear();
+    unsigned dumped=range_sort(results,ranges);
+    if( dumped*100/results.size()>20){
+      std::cout << "Dumped: " << dumped << '/' << results.size()
+		<< " Resampling ranges" << std::endl;
+      setup_ranges( ranges);
+    }
+    results.clear();
 
     std::cout << "Run: " << j << std::endl;
     for( auto it=ranges.begin();it!=ranges.end();it++){
@@ -224,21 +198,12 @@ void random_spray(std::vector<struct range> &ranges){
   }
 }
 
-void range_sort(std::vector< std::pair<double,uint64_t> > &results,
+unsigned range_sort(std::vector< std::pair<double,uint64_t> > &results,
 		std::vector<struct range> &ranges){
-  double max_input,min_input;
-  uint64_t max_time,min_time;
-  bool max_flag,min_flag;
   unsigned dumped=0;
 
-  max_input=min_time=0.0;
-  max_time=min_time=0;
-  max_flag=min_flag=false;
   for( auto it=results.begin();it!=results.end();it++){
     bool flag=0;
-
-
-    // std::cout << it->second << ' ';
     for( auto range=ranges.begin();range!=ranges.end();range++){
       if(it->second>=range->min && it->second<=range->max){
 	range->count++;
@@ -248,39 +213,17 @@ void range_sort(std::vector< std::pair<double,uint64_t> > &results,
     }
     if(!flag){
       dumped++;
-      // std::cout << std::hexfloat << it->first << ' ' << it->second << " d"
-      // 		<< std::endl;
-      if( it->second>max_time){
-	max_time=it->second;
-	max_input=it->first;
-	max_flag=true;
-      }
-      if( !min_flag || it->second<min_time){
-	min_time=it->second;
-	min_input=it->second;
-	min_flag=true;
-      }
+      if( dumped%samplerate==0)
+	numbers.push_back(it->second);
     }
-	
-    if( it->second>100000)
-      std::cout << std::hexfloat << it->first << ' ' << it->second << " big"
-		<< std::endl;
-  }
-  if(max_flag)
-    std::cout << std::hexfloat << max_input << ' ' << max_time << " max"
-	      << std::endl;
-  if(min_flag)
-    std::cout << std::hexfloat << min_input << ' ' << min_time << " min"
-	      << std::endl;
-  
-  std::cout << "Dumped " << dumped << " values" << std::endl;
+  }  
+  return dumped;
 }
 
 void targeted_walk( const std::vector< double> &numbers,
 		    std::vector<struct range> &ranges){
 
   pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-  std::vector< std::pair<double,uint64_t> > results;
 
   union db {
     double d;
@@ -295,24 +238,36 @@ void targeted_walk( const std::vector< double> &numbers,
 
   for( auto num=numbers.begin();num!=numbers.end();num++){
     db orig;
+    std::vector< std::pair<double,uint64_t> > results;
+    bool flag;
+    do{
+      flag=true;
 #pragma omp parallel for
-    for(int i=1;i<cases;i++){
-      orig.d=*num;
-      double a1,a2;
-      double b1,b2;
-      orig.bf.m-=i; 
-      a1=b1=orig.d;
-      orig.bf.m+=2*i;
-      a2=b2=orig.d;
-      uint64_t t1=time_exp(iterations,a1);
-      uint64_t t2=time_exp(iterations,a2);
-      pthread_mutex_lock(&mutex);
-      results.push_back(std::pair<double,uint64_t>(b1, t1));
-      results.push_back(std::pair<double,uint64_t>(b2, t2));      
-      pthread_mutex_unlock(&mutex);
-    }
-
-    range_sort(results, ranges);
+      for(int i=1;i<cases;i++){
+	orig.d=*num;
+	double a1,a2;
+	double b1,b2;
+	orig.bf.m-=i; 
+	a1=b1=orig.d;
+	orig.bf.m+=2*i;
+	a2=b2=orig.d;
+	uint64_t t1=time_exp(iterations,a1);
+	uint64_t t2=time_exp(iterations,a2);
+	pthread_mutex_lock(&mutex);
+	results.push_back(std::pair<double,uint64_t>(b1, t1));
+	results.push_back(std::pair<double,uint64_t>(b2, t2));      
+	pthread_mutex_unlock(&mutex);
+      }
+      
+      unsigned dumped=range_sort(results, ranges);
+      if( dumped*100/results.size()>20){ //20% is an arbitrary
+	flag=false;
+	std::cout << "Dumped: " << dumped << '/' << results.size()
+		  << " Resampling ranges" << std::endl;
+	setup_ranges( ranges);
+	results.clear();
+      }
+    }while(flag==false);
     std::cout << "Around: " << std::hexfloat << *num << ':' << std::endl;
     for( auto it=ranges.begin();it!=ranges.end();it++){
       std::cout << " r:" << it->min << ':'
@@ -320,5 +275,58 @@ void targeted_walk( const std::vector< double> &numbers,
 		<< std::endl;
     }
     results.clear();
+  }
+}
+
+void setup_ranges( std::vector<struct range> &ranges){
+  std::vector< std::pair<double,uint64_t> > results;
+  pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+  ranges.clear();
+#pragma omp parallel for
+  for( int i=0;i<numbers.size();i++){
+    double b=numbers[i];
+    //this overwrites the variable b with the sum
+    uint64_t time=time_exp(iterations, b);
+
+    pthread_mutex_lock(&mutex);
+    results.push_back(std::pair<double,uint64_t>(numbers[i],time));
+    pthread_mutex_unlock(&mutex);
+  }
+
+  // end parallel region
+  std::sort(results.begin(), results.end(),
+	    [](auto &left, auto &right) { return left.second < right.second; }
+	    );
+
+  unsigned count=1;
+  unsigned sum=results[0].second,begin=0;
+  for( unsigned i=1;i<results.size()-1;i++){ // intentionally starts at 1
+    auto lowgap=results[i].second-results[i-1].second;
+    auto highgap=results[i+1].second-results[i].second;
+    auto partmean=sum/count/20; // 20=5% which is arbitrary but works
+    if( (lowgap<=highgap && highgap<partmean) || lowgap<=partmean ) { 
+      count++;
+      sum+=results[i].second;
+    } else { // closer to next value
+      if(count>2)
+	//if it is this small it probably isn't a plateau it is a transition
+	ranges.push_back(range(begin,i-1,count,sum));
+      begin=i;
+      count=1;
+      sum=results[i].second;
+    }
+  }
+  ranges.push_back(range(begin,results.size()-1,count,sum));
+
+  std::cout << std::endl << ranges.size() << " Ranges: " << std::endl;
+  for( auto it=ranges.begin();it!=ranges.end();it++){
+    it->min=results[it->begin].second;
+    it->max=results[it->end].second;
+    std::cout << it->begin << '-' << it->end << " c:" << it->count << "\tm:"
+	      << it->sum/it->count << " \tr:" << it->min
+	      << ':' << it->max << ' '
+	      << std::endl;
+    it->count=0;
   }
 }
