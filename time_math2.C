@@ -20,6 +20,9 @@ unsigned cases=20000;
 unsigned num_sets=5000;
 unsigned samplerate=1000;
 bool nonnormals=false;
+bool verbose=false;
+
+double (*func)(double)=&exp;
 
 std::vector< double> numbers;
 
@@ -44,7 +47,7 @@ static uint64_t time_exp (int count, double &val)
   
   Gettimeofday(start_ts);
   for (int i=1; i <= count; i++) {
-    sum += exp(val);
+    sum += (*func)(val);
   }
   Gettimeofday(end_ts);
   
@@ -75,7 +78,7 @@ int main(int argc, char **argv)
   int digit_optind = 0;
   bool randspray=false;
   bool targeted=false;
-  bool dumpnums=true;
+  bool dumpnums=false;
   
   while (c!=-1) {
     int this_option_optind = optind ? optind : 1;
@@ -89,10 +92,12 @@ int main(int argc, char **argv)
       {"nonnormals",     no_argument,       0, 'n'},
       {"dumpnumbers",    no_argument,       0, 'd'},
       {"samplerate",     required_argument, 0, 'h'},
+      {"function",       required_argument, 0, 'f'},
+      {"verbose",        no_argument,       0, 'v'},
       {0,                0,                 0,  0 }
     };
 
-    c = getopt_long(argc, argv, "icdhnrst",
+    c = getopt_long(argc, argv, "c:df:i:h:nrs:t",
 		    long_options, &option_index);
     switch (c) {
     case -1:
@@ -115,6 +120,50 @@ int main(int argc, char **argv)
     case 'd':
       dumpnums=true;
       break;
+    case 'v':
+      verbose=true;
+      break;
+    case 'f':{
+      std::string s(optarg);
+      if(s=="tan")
+	func=&tan;
+      else if(s=="cos")
+	func=&cos;
+      else if(s=="sin")
+	func=&sin;
+      else if(s=="acosh")
+	func=&acosh;
+      else if(s=="acos")
+	func=&acos;
+      else if(s=="asinh")
+	func=&asinh;
+      else if(s=="asin")
+	func=&asin;
+      else if(s=="atanh")
+	func=&atanh;
+      else if(s=="cosh")
+	func=&cosh;
+      else if(s=="cos")
+	func=&cos;
+      else if(s=="exp2")
+	func=&exp2;
+      else if(s=="log2")
+	func=&log2;
+      else if(s=="log")
+	func=&log;
+      else if(s=="rint")
+	func=&rint;
+      else if(s=="sinh")
+	func=&sinh;
+      else if(s=="sqrt")
+	func=&sqrt;
+      else if(s=="tanh")
+	func=&tanh;
+      else if(s=="trunc")
+	func=&trunc;
+      else
+	exit(2);
+      break;}
     case 'c':
       sscanf(optarg,"%ld",&cases);
       break;
@@ -203,6 +252,8 @@ unsigned range_sort(std::vector< std::pair<double,uint64_t> > &results,
   unsigned dumped=0;
 
   for( auto it=results.begin();it!=results.end();it++){
+    if(it->second==0)
+      continue;
     bool flag=0;
     for( auto range=ranges.begin();range!=ranges.end();range++){
       if(it->second>=range->min && it->second<=range->max){
@@ -213,8 +264,12 @@ unsigned range_sort(std::vector< std::pair<double,uint64_t> > &results,
     }
     if(!flag){
       dumped++;
-      if( dumped%samplerate==0)
-	numbers.push_back(it->second);
+      // std::cout << std::hexfloat << it->first << ' ' << it->second
+      //	<< std::endl; // debug
+      if( dumped%samplerate==0){
+	numbers.push_back(it->first);
+	it->second=0;
+      }
     }
   }  
   return dumped;
@@ -236,43 +291,45 @@ void targeted_walk( const std::vector< double> &numbers,
     unsigned char c[8];
   };
 
-  for( auto num=numbers.begin();num!=numbers.end();num++){
+  unsigned idx=0;
+  for( auto num=numbers.begin();num!=numbers.end();num++,idx++){
     db orig;
     std::vector< std::pair<double,uint64_t> > results;
+ #pragma omp parallel for
+    for(int i=1;i<cases;i++){
+      orig.d=*num;
+      double a1,a2;
+      double b1,b2;
+      orig.bf.m-=i; 
+      a1=b1=orig.d;
+      orig.bf.m+=2*i;
+      a2=b2=orig.d;
+      uint64_t t1=time_exp(iterations,a1);
+      uint64_t t2=time_exp(iterations,a2);
+      pthread_mutex_lock(&mutex);
+      results.push_back(std::pair<double,uint64_t>(b1, t1));
+      results.push_back(std::pair<double,uint64_t>(b2, t2));      
+      pthread_mutex_unlock(&mutex);
+    }
+      
     bool flag;
     do{
       flag=true;
-#pragma omp parallel for
-      for(int i=1;i<cases;i++){
-	orig.d=*num;
-	double a1,a2;
-	double b1,b2;
-	orig.bf.m-=i; 
-	a1=b1=orig.d;
-	orig.bf.m+=2*i;
-	a2=b2=orig.d;
-	uint64_t t1=time_exp(iterations,a1);
-	uint64_t t2=time_exp(iterations,a2);
-	pthread_mutex_lock(&mutex);
-	results.push_back(std::pair<double,uint64_t>(b1, t1));
-	results.push_back(std::pair<double,uint64_t>(b2, t2));      
-	pthread_mutex_unlock(&mutex);
-      }
-      
       unsigned dumped=range_sort(results, ranges);
       if( dumped*100/results.size()>20){ //20% is an arbitrary
 	flag=false;
 	std::cout << "Dumped: " << dumped << '/' << results.size()
 		  << " Resampling ranges" << std::endl;
 	setup_ranges( ranges);
-	results.clear();
       }
     }while(flag==false);
-    std::cout << "Around: " << std::hexfloat << *num << ':' << std::endl;
-    for( auto it=ranges.begin();it!=ranges.end();it++){
-      std::cout << " r:" << it->min << ':'
-		<< it->max << " c:" << it->count << ' '
-		<< std::endl;
+    std::cout << idx << '/' << numbers.size() << " Around: "
+	      << std::hexfloat << *num << ':' << std::endl;
+    if(verbose)
+      for( auto it=ranges.begin();it!=ranges.end();it++){
+	std::cout << " r:" << it->min << ':'
+		  << it->max << " c:" << it->count << ' '
+		  << std::endl;
     }
     results.clear();
   }
