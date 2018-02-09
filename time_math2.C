@@ -292,8 +292,14 @@ void targeted_walk( const std::vector< double> &numbers,
   };
 
   unsigned idx=0;
+  /* numbers will get added to the list to expand the size of the ranges
+     we don't want to continue the test beyond the initial range of numbers
+     otherwise the test goes on too long */
+  unsigned orig_numbers=numbers.size();
   for( auto num=numbers.begin();num!=numbers.end();num++,idx++){
     db orig;
+    if( idx>orig_numbers)
+      break;
     std::vector< std::pair<double,uint64_t> > results;
  #pragma omp parallel for
     for(int i=1;i<cases;i++){
@@ -323,8 +329,8 @@ void targeted_walk( const std::vector< double> &numbers,
 	setup_ranges( ranges);
       }
     }while(flag==false);
-    std::cout << idx << '/' << numbers.size() << " Around: "
-	      << std::hexfloat << *num << ':' << std::endl;
+    std::cout << idx << '/' << orig_numbers << '(' << numbers.size() << ')'
+	      << " Around: " << std::hexfloat << *num << ':' << std::endl;
     if(verbose)
       for( auto it=ranges.begin();it!=ranges.end();it++){
 	std::cout << " r:" << it->min << ':'
