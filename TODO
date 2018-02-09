@@ -1,0 +1,4 @@
+Feb 9 2018 Test with functions other than exp
+Feb 9 2018 Test with Intel's MKL
+Feb 9 2018 Add support for 2 variable functions like pow(x,y)
+Feb 9 2018 Some documentation would be nice
