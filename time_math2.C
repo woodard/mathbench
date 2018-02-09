@@ -266,7 +266,9 @@ unsigned range_sort(std::vector< std::pair<double,uint64_t> > &results,
       dumped++;
       // std::cout << std::hexfloat << it->first << ' ' << it->second
       //	<< std::endl; // debug
-      if( dumped%samplerate==0){
+      if( dumped%samplerate==0 &&
+	  // don't add duplicate numbers
+	  std::find(numbers.begin(),numbers.end(),it->first)==numbers.end()){
 	numbers.push_back(it->first);
 	it->second=0;
       }

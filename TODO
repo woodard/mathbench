@@ -1,3 +1,4 @@
+Feb 9 2018 do timing based on papi rather than gettimeofday()
 Feb 9 2018 Don't add numbers that are already in the data set.
 Feb 9 2018 Test with functions other than exp
 Feb 9 2018 Test with Intel's MKL
