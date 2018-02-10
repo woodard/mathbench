@@ -143,8 +143,6 @@ int main(int argc, char **argv)
 	func=&atanh;
       else if(s=="cosh")
 	func=&cosh;
-      else if(s=="cos")
-	func=&cos;
       else if(s=="exp2")
 	func=&exp2;
       else if(s=="log2")
@@ -195,7 +193,8 @@ int main(int argc, char **argv)
     random_spray( ranges);
   if(targeted)
     targeted_walk( numbers, ranges);
-  setup_ranges( ranges); // print the ranges one last time.
+  if(targeted || randspray)
+    setup_ranges( ranges); // print the ranges one last time.
   if(dumpnums){
     std::cout << "---------" << std::endl << std::hexfloat;
     for( auto num=numbers.begin(); num!=numbers.end();num++)
