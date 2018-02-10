@@ -195,6 +195,7 @@ int main(int argc, char **argv)
     random_spray( ranges);
   if(targeted)
     targeted_walk( numbers, ranges);
+  setup_ranges( ranges); // print the ranges one last time.
   if(dumpnums){
     std::cout << "---------" << std::endl << std::hexfloat;
     for( auto num=numbers.begin(); num!=numbers.end();num++)
