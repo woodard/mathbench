@@ -13,6 +13,11 @@
   fast and some numbers are very slow and this represents problem with
   the polynomial in this area.
 
+* Print timing for the entire run.
+
+* When doing targeted tests skip numbers that are within each other's
+  range because that is essentially doing the same test.
+
 ## Documentation
 
 Some documentation would be nice
@@ -28,7 +33,6 @@ range and then calculates the probability that numbers will hit a
 particular performance range.
 Feb 9 2018 Test with crlibm's exp
 Feb 9 2018 do timing based on papi rather than gettimeofday()
-Feb 9 2018 Test with functions other than exp
 Feb 9 2018 Add support for 2 variable functions like pow(x,y)
 Feb 9 2018 Run on a GPU
 Feb 9 2018 Add a mode that does bitwise comparisons between the
