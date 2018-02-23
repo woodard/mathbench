@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,6 +15,8 @@
 #include <utility>
 #include <vector>
 #include <algorithm>
+#include <limits>
+#include <cmath>
 
 unsigned iterations=100000;
 unsigned cases=20000;
@@ -181,9 +184,13 @@ int main(int argc, char **argv)
     if(line[0]=='#')
       continue;
     double a;
-    sscanf(line.c_str(),"%lf",&a);
-    if(isnormal(a) || nonnormals==true)
-      numbers.push_back(a);
+    if( sscanf(line.c_str(),"%lf",&a) == 0)
+      continue;
+    if( std::find(numbers.begin(), numbers.end(), a) != numbers.end())
+      std::cout << "Discarding duplicate: " << line << std::endl;
+    else 
+      if(isnormal(a) || nonnormals==true)
+	numbers.push_back(a);
   }
 
   std::vector<struct range> ranges;
@@ -282,16 +289,14 @@ void targeted_walk( const std::vector< double> &numbers,
 
   pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
-  union db {
-    double d;
-    struct {
-      unsigned long m : 52;
-      unsigned long es : 1;
-      unsigned long e : 10;
-      unsigned long s : 1;
-    }bf;
-    unsigned char c[8];
+  class srch_rng{
+  public:
+    double begin;
+    double end;
+    std::vector<double> nums;
   };
+
+  std::vector<srch_rng> srng;
 
   unsigned idx=0;
   /* numbers will get added to the list to expand the size of the ranges
@@ -299,47 +304,86 @@ void targeted_walk( const std::vector< double> &numbers,
      otherwise the test goes on too long */
   unsigned orig_numbers=numbers.size();
   for( auto num=numbers.begin();num!=numbers.end();num++,idx++){
-    db orig;
     if( idx>orig_numbers)
       break;
-    std::vector< std::pair<double,uint64_t> > results;
- #pragma omp parallel for
-    for(int i=1;i<cases;i++){
-      orig.d=*num;
-      double a1,a2;
-      double b1,b2;
-      orig.bf.m-=i; 
-      a1=b1=orig.d;
-      orig.bf.m+=2*i;
-      a2=b2=orig.d;
-      uint64_t t1=time_exp(iterations,a1);
-      uint64_t t2=time_exp(iterations,a2);
-      pthread_mutex_lock(&mutex);
-      results.push_back(std::pair<double,uint64_t>(b1, t1));
-      results.push_back(std::pair<double,uint64_t>(b2, t2));      
-      pthread_mutex_unlock(&mutex);
+
+    srch_rng newone;
+    newone.nums.push_back(*num);
+    newone.begin=newone.end=*num;
+    for(unsigned i=0;i<cases;i++){
+      newone.begin=std::nexttoward(newone.begin,
+				   -std::numeric_limits<double>::max());
+      newone.end=std::nexttoward(newone.end,
+				 std::numeric_limits<double>::max());
+      assert(newone.begin<newone.end);
     }
       
+    bool flag=false;
+    for( auto sr=srng.begin();sr!=srng.end();sr++){
+      // if the ranges overlap
+      if( (newone.begin>=sr->begin && newone.begin<sr->end) ||
+	  (newone.end>sr->begin && newone.end<=sr->end)) {
+	sr->begin=std::min(sr->begin,newone.begin);
+	sr->end=std::max(sr->end,newone.end);
+	sr->nums.push_back(*num);
+	flag=true;
+	if(verbose)
+	  std::cout << "Combining " << std::hexfloat << *num
+		    << " into a test range with " << std::hexfloat 
+		    << sr->nums[0] << " since they overlap" << std::endl;
+	break;
+      }
+    }
+    if(!flag){ // create a new search range
+      srng.push_back(newone);
+      if(verbose)
+	std::cout << "New search range for " << std::hexfloat << *num << " ("
+		  << newone.begin << '-' << newone.end << ')' << std::endl;
+    }
+  }
+  
+
+  pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
+  unsigned done=0;
+ #pragma omp parallel for
+  for(unsigned int i=0;i<srng.size();i++){
+    std::vector< std::pair<double,uint64_t> > results;
+    double cur=srng[i].begin;
+    for( unsigned int j=0;j<2*cases;
+	 j++,cur=std::nexttoward(cur, std::numeric_limits<double>::max())){
+      uint64_t t=time_exp(iterations,cur);
+      results.push_back(std::pair<double,uint64_t>(cur, t));
+    }
+
     bool flag;
     do{
       flag=true;
+      pthread_mutex_lock(&mutex);
       unsigned dumped=range_sort(results, ranges);
+      pthread_mutex_unlock(&mutex);
+      
       if( dumped*100/results.size()>20){ //20% is an arbitrary
 	flag=false;
 	std::cout << "Dumped: " << dumped << '/' << results.size()
 		  << " Resampling ranges" << std::endl;
+	pthread_mutex_lock(&mutex);
 	setup_ranges( ranges);
+	pthread_mutex_unlock(&mutex);
       }
     }while(flag==false);
-    std::cout << idx << '/' << orig_numbers << '(' << numbers.size() << ')'
-	      << " Around: " << std::hexfloat << *num << ':' << std::endl;
-    if(verbose)
-      for( auto it=ranges.begin();it!=ranges.end();it++){
-	std::cout << " r:" << it->min << ':'
-		  << it->max << " c:" << it->count << ' '
-		  << std::endl;
+    std::cout << "Search range: ";
+    pthread_mutex_lock(&m);
+    std::cout << ++done;
+    pthread_mutex_unlock(&m);
+    std::cout << '/' << srng.size() << ' ' << std::hexfloat << srng[i].begin
+	      << '-' << srng[i].end << std::endl;
+    if(verbose){
+      pthread_mutex_lock(&mutex);
+      for( auto it=ranges.begin();it!=ranges.end();it++)
+	std::cout << " r:" << it->min << ':' << it->max << " c:" << it->count
+		  << ' ' << std::endl;      
+      pthread_mutex_lock(&mutex);
     }
-    results.clear();
   }
 }
 

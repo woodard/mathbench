@@ -26,7 +26,9 @@ The general idea is:
 
 ./time_math2 -t -d input-decks/exp-inputs-hard
 
-The general idea is it will take the list of numbers fed into it via the input deck and then it runs something like your time_math1.c and then it groups the numbers into ranges based upon time.
+The general idea is it will take the list of numbers fed into it via
+the input deck and then it runs something like your time_math1.c and
+then it groups the numbers into ranges based upon time.
 
 9 Ranges:
 2-101 c:100     m:1445  r:1357:1495
@@ -39,12 +41,27 @@ The general idea is it will take the list of numbers fed into it via the input d
 748-750 c:3     m:3270449       r:3227605:3327688
 751-755 c:4     m:3955378       r:3927310:5240862
 
-What you can see from this is glibc's libm really tends to fall into 9 ranges of time to compute. The first column is the range of numbers in the input-deck. The 'c' is the count of items that fall in that range. 'm' is the median of all the numbers that fall in that range and then 'r' is the actual range of times that the values that fall in that range.
+What you can see from this is glibc's libm really tends to fall into 9
+ranges of time to compute. The first column is the range of numbers in
+the input-deck. The 'c' is the count of items that fall in that
+range. 'm' is the median of all the numbers that fall in that range
+and then 'r' is the actual range of times that the values that fall in
+that range.
 
 -d is dump the numbers used to make the range
--t is target the numbers provided in the input deck. It looks at the numbers adjacent to the ones provided in the input deck and then tries those out. The idea with this is to see how likely we are to hit these worst case values. Is it just one particular number that is bad or is it a whole range of numbers. In that area which perform badly which can suggest a problem with the polynomial or function used to calculate in that vicinity. 
 
-I also have a -r mode which basically tries random numbers.This currently doesn't work really well. I think that I need to constrain it to a range so that it just checks something like 0.0-2.0 or something.
+-t is target the numbers provided in the input deck. It looks at the
+ numbers adjacent to the ones provided in the input deck and then
+ tries those out. The idea with this is to see how likely we are to
+ hit these worst case values. Is it just one particular number that is
+ bad or is it a whole range of numbers. In that area which perform
+ badly which can suggest a problem with the polynomial or function
+ used to calculate in that vicinity.
+
+I also have a -r mode which basically tries random numbers.This
+currently doesn't work really well. I think that I need to constrain
+it to a range so that it just checks something like 0.0-2.0 or
+something.
 
 The rest are just tuning parameters.
 
