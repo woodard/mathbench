@@ -1,8 +1,12 @@
 #include "libmb.h"
 
 #include <math.h>
+#include <stdio.h>
 
 #include <string>
+#include <fstream>
+#include <vector>
+#include <algorithm>
 
 double (*getFunc(char *optarg))(double){
   double (*func)(double);
@@ -44,4 +48,25 @@ double (*getFunc(char *optarg))(double){
   else
     exit(2);
   return func;
+}
+
+void read_numbers(char *filename, std::vector< double> &numbers){
+  std::ifstream infile(filename);
+  // TODO: some error handling here
+  std::string line;
+
+  while (std::getline(infile, line)){
+    if(line[0]=='#')
+      continue;
+    double a;
+    if( sscanf(line.c_str(),"%lf",&a) == 0)
+      continue;
+    if( std::find(numbers.begin(), numbers.end(), a) != numbers.end())
+      std::cout << "Discarding duplicate: " << line << std::endl;
+    else
+      if(isnormal(a) || nonnormals==true)
+	numbers.push_back(a);
+      else
+	std::cout << "Discarding nonnormal: " << line << std::endl;
+  }
 }

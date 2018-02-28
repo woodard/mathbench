@@ -8,10 +8,6 @@
 #include <pthread.h>
 #include <getopt.h>
 
-#include <iostream>
-#include <fstream>
-#include <sstream>
-#include <string>
 #include <utility>
 #include <vector>
 #include <algorithm>
@@ -141,23 +137,8 @@ int main(int argc, char **argv)
       exit(1);
     }
   }
-  
-  std::ifstream infile(argv[optind]);
-  // TODO: some error handling here
-  std::string line;
 
-  while (std::getline(infile, line)){
-    if(line[0]=='#')
-      continue;
-    double a;
-    if( sscanf(line.c_str(),"%lf",&a) == 0)
-      continue;
-    if( std::find(numbers.begin(), numbers.end(), a) != numbers.end())
-      std::cout << "Discarding duplicate: " << line << std::endl;
-    else 
-      if(isnormal(a) || nonnormals==true)
-	numbers.push_back(a);
-  }
+  read_numbers(argv[optind],numbers);
 
   std::vector<struct range> ranges;
   setup_ranges( ranges);
