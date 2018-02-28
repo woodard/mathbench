@@ -43,7 +43,7 @@ static inline void Gettimeofday(struct timeval &ts){
   }
 }
 
-static uint64_t time_exp (int count, double &val)
+static uint64_t time_func (int count, double &val)
 {
   double sum = 0.0;
   struct timeval start_ts, end_ts;
@@ -230,7 +230,7 @@ void random_spray(std::vector<struct range> &ranges){
       }
       
       double b=a;
-      uint64_t time=time_exp(iterations, a);
+      uint64_t time=time_func(iterations, a);
       pthread_mutex_lock(&mutex);
       results.push_back(std::pair<double,uint64_t>(b, time));
       pthread_mutex_unlock(&mutex);
@@ -351,7 +351,7 @@ void targeted_walk( const std::vector< double> &numbers,
     double cur=srng[i].begin;
     for( unsigned int j=0;j<2*cases;
 	 j++,cur=std::nexttoward(cur, std::numeric_limits<double>::max())){
-      uint64_t t=time_exp(iterations,cur);
+      uint64_t t=time_func(iterations,cur);
       results.push_back(std::pair<double,uint64_t>(cur, t));
     }
 
@@ -396,7 +396,7 @@ void setup_ranges( std::vector<struct range> &ranges){
   for( int i=0;i<numbers.size();i++){
     double b=numbers[i];
     //this overwrites the variable b with the sum
-    uint64_t time=time_exp(iterations, b);
+    uint64_t time=time_func(iterations, b);
 
     pthread_mutex_lock(&mutex);
     results.push_back(std::pair<double,uint64_t>(numbers[i],time));
