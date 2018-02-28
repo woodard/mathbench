@@ -18,6 +18,8 @@
 #include <limits>
 #include <cmath>
 
+#include "libmb.h"
+
 unsigned iterations=100000;
 unsigned cases=20000;
 unsigned num_sets=5000;
@@ -82,23 +84,23 @@ int main(int argc, char **argv)
   bool randspray=false;
   bool targeted=false;
   bool dumpnums=false;
+  static struct option long_options[] = {
+    {"iterations",     required_argument, 0, 'i'},
+    {"random",         no_argument,       0, 'r'},
+    {"targetd",        no_argument,       0, 't'},
+    {"sets",           required_argument, 0, 's'},
+    {"cases",          required_argument, 0, 'c'},
+    {"nonnormals",     no_argument,       0, 'n'},
+    {"dumpnumbers",    no_argument,       0, 'd'},
+    {"samplerate",     required_argument, 0, 'h'},
+    {"function",       required_argument, 0, 'f'},
+    {"verbose",        no_argument,       0, 'v'},
+    {0,                0,                 0,  0 }
+  };
   
   while (c!=-1) {
     int this_option_optind = optind ? optind : 1;
     int option_index = 0;
-    static struct option long_options[] = {
-      {"iterations",     required_argument, 0, 'i'},
-      {"random",         no_argument,       0, 'r'},
-      {"targetd",        no_argument,       0, 't'},
-      {"sets",           required_argument, 0, 's'},
-      {"cases",          required_argument, 0, 'c'},
-      {"nonnormals",     no_argument,       0, 'n'},
-      {"dumpnumbers",    no_argument,       0, 'd'},
-      {"samplerate",     required_argument, 0, 'h'},
-      {"function",       required_argument, 0, 'f'},
-      {"verbose",        no_argument,       0, 'v'},
-      {0,                0,                 0,  0 }
-    };
 
     c = getopt_long(argc, argv, "c:df:i:h:nrs:tv",
 		    long_options, &option_index);
@@ -126,45 +128,9 @@ int main(int argc, char **argv)
     case 'v':
       verbose=true;
       break;
-    case 'f':{
-      std::string s(optarg);
-      if(s=="tan")
-	func=&tan;
-      else if(s=="cos")
-	func=&cos;
-      else if(s=="sin")
-	func=&sin;
-      else if(s=="acosh")
-	func=&acosh;
-      else if(s=="acos")
-	func=&acos;
-      else if(s=="asinh")
-	func=&asinh;
-      else if(s=="asin")
-	func=&asin;
-      else if(s=="atanh")
-	func=&atanh;
-      else if(s=="cosh")
-	func=&cosh;
-      else if(s=="exp2")
-	func=&exp2;
-      else if(s=="log2")
-	func=&log2;
-      else if(s=="log")
-	func=&log;
-      else if(s=="rint")
-	func=&rint;
-      else if(s=="sinh")
-	func=&sinh;
-      else if(s=="sqrt")
-	func=&sqrt;
-      else if(s=="tanh")
-	func=&tanh;
-      else if(s=="trunc")
-	func=&trunc;
-      else
-	exit(2);
-      break;}
+    case 'f':
+      func=getFunc(optarg);
+      break;
     case 'c':
       sscanf(optarg,"%ld",&cases);
       break;
