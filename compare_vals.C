@@ -19,6 +19,7 @@ double (*func)(double)=&exp;
 int main(int argc, char **argv){
   int c=0;
   static struct option long_options[] = {
+    {"altfuncname",    required_argument, 0, 'a'},
     {"cases",          required_argument, 0, 'c'},
     {"dumpnumbers",    no_argument,       0, 'd'},
     {"function",       required_argument, 0, 'f'},
@@ -28,6 +29,7 @@ int main(int argc, char **argv){
     {0,                0,                 0,  0 }
   };
   const char *funcname="exp";
+  const char *altfuncname=NULL;
   unsigned cases=20000;
   bool targeted=false;
   bool dumpnums=false;
@@ -35,9 +37,12 @@ int main(int argc, char **argv){
   while (c!=-1) {
     int this_option_optind = optind ? optind : 1;
     int option_index = 0;
-    c = getopt_long(argc, argv, "c:df:ntv",
+    c = getopt_long(argc, argv, "a:c:df:ntv",
 		    long_options, &option_index);
     switch (c) {
+    case 'a':
+      altfuncname=optarg;
+      break;
     case 'c':
       sscanf(optarg,"%ld",&cases);
       break;
@@ -66,10 +71,17 @@ int main(int argc, char **argv){
   read_numbers(argv[optind],nonnormals,numbers);
 
   void *altlibm=dlmopen(LM_ID_NEWLM, argv[optind+1], RTLD_LAZY);
-  if( altlibm==NULL)
+  if( altlibm==NULL){
+    std::cerr << "Loading of alternative libm implementation failed: "
+	      << dlerror() << std::endl;
     exit(3);
+  }
+
+  if(altfuncname==NULL)
+    altfuncname=funcname;
   double (*altfunc)(double)=
-    reinterpret_cast<double (*)(double)>(dlsym(altlibm,funcname));
+    reinterpret_cast<double (*)(double)>(dlsym(altlibm,altfuncname));
+  
   if( altfunc==NULL)
     exit(4);
 

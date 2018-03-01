@@ -7,6 +7,7 @@
 #include <sys/time.h>
 #include <pthread.h>
 #include <getopt.h>
+#include <dlfcn.h>
 
 #include <iostream>
 #include <utility>
@@ -80,6 +81,8 @@ int main(int argc, char **argv)
   bool targeted=false;
   bool dumpnums=false;
   static struct option long_options[] = {
+    {"altlibm",        required_argument, 0, 'A'},
+    {"altfuncname",    required_argument, 0, 'a'},
     {"iterations",     required_argument, 0, 'i'},
     {"random",         no_argument,       0, 'r'},
     {"targetd",        no_argument,       0, 't'},
@@ -93,15 +96,29 @@ int main(int argc, char **argv)
     {0,                0,                 0,  0 }
   };
   
+  void *altlibm=NULL;
   while (c!=-1) {
     int this_option_optind = optind ? optind : 1;
     int option_index = 0;
 
-    c = getopt_long(argc, argv, "c:df:i:h:nrs:tv",
+    c = getopt_long(argc, argv, "A:a:c:df:i:h:nrs:tv",
 		    long_options, &option_index);
     switch (c) {
     case -1:
       break; // also terminates the while loop
+    case 'A':
+      altlibm=dlmopen(LM_ID_NEWLM, optarg, RTLD_LAZY);
+      if( altlibm==NULL){
+	std::cerr << "Loading of alternative libm implementation failed: "
+		  << dlerror() << std::endl;
+	exit(3);
+      }
+      break;
+    case 'a':
+      func=reinterpret_cast<double (*)(double)>(dlsym(altlibm,optarg));
+      /* yeah there should be some error checking here but if this didn't
+	 work then the program will crash anyway */
+      break;
     case 'i':
       sscanf(optarg,"%ld",&iterations);
       break;
