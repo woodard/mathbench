@@ -18,7 +18,7 @@ libmb.o: libmb.C libmb.h
 
 # special cases
 time_math2.noomp: time_math2-noomp.o libmb-noomp.o
-	g++ -g -O2 -D_GNU_SOURCE time_math2-noomp.o libmb-noomp \
+	g++ -g -O2 -D_GNU_SOURCE time_math2-noomp.o libmb-noomp.o \
 	    -o time_math2.noomp $(LDFLAGS)
 
 libmb-noomp.o: libmb.C libmb.h
