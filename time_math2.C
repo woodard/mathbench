@@ -8,6 +8,7 @@
 #include <pthread.h>
 #include <getopt.h>
 
+#include <iostream>
 #include <utility>
 #include <vector>
 #include <algorithm>
@@ -138,7 +139,7 @@ int main(int argc, char **argv)
     }
   }
 
-  read_numbers(argv[optind],numbers);
+  read_numbers(argv[optind], nonnormals, numbers);
 
   std::vector<struct range> ranges;
   setup_ranges( ranges);

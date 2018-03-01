@@ -2,6 +2,7 @@
 #define __LIBMB_H_
 
 double (*getFunc(char *optarg))(double);
-void read_numbers(char *filename, std::vector< double> &numbers);
+void read_numbers(char *filename, bool nonnormals,
+		  std::vector< double> &numbers);
 
 #endif

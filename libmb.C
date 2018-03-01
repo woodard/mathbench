@@ -1,9 +1,8 @@
-#include "libmb.h"
-
 #include <math.h>
 #include <stdio.h>
 
 #include <string>
+#include <iostream>
 #include <fstream>
 #include <vector>
 #include <algorithm>
@@ -50,7 +49,8 @@ double (*getFunc(char *optarg))(double){
   return func;
 }
 
-void read_numbers(char *filename, std::vector< double> &numbers){
+void read_numbers(char *filename, bool nonnormals,
+		  std::vector< double> &numbers){
   std::ifstream infile(filename);
   // TODO: some error handling here
   std::string line;
