@@ -1,7 +1,6 @@
 CXXFLAGS=-g -O2 -fopenmp -D_GNU_SOURCE
 LDFLAGS=-lm
 INTPATH=/usr/tce/packages/intel/intel-18.0.1/lib/intel64_lin/
-CRLMPATH=/home/ben/Work/crlibm
 
 all: time_math2 compare_vals
 
@@ -33,10 +32,7 @@ time_math2.mkl: time_math2.o libmb.o
 	g++ $(CXXFLAGS) time_math2.o libmb.o -o time_math2 -L$(INTPATH) \
             -Wl,-rpath,$(INTPATH) -limf -lintlc
 
-time_math2.crlm: time_math2.o libmb.o
-	g++ $(CXXFLAGS) time_math2.o libmb.o -o time_math2.crlm -L$(CRLMPATH) \
-	    -lcrlibm
-
 # utility
 clean:
-	rm -f *.o time_math2
+	rm -f *.o time_math2 time_math2.mkl time_math2.noomp \
+	    compare_vals *~

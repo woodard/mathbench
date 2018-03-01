@@ -6,6 +6,10 @@
 #include <fstream>
 #include <vector>
 #include <algorithm>
+#include <limits>
+#include <cmath>
+
+#include "libmb.h"
 
 double (*getFunc(char *optarg))(double){
   double (*func)(double);
@@ -68,5 +72,39 @@ void read_numbers(char *filename, bool nonnormals,
 	numbers.push_back(a);
       else
 	std::cout << "Discarding nonnormal: " << line << std::endl;
+  }
+}
+
+void make_srngs( const std::vector<double> &numbers,
+		 std::vector<srch_rng> &srng, unsigned cases, bool verbose){
+  for( auto num=numbers.begin();num!=numbers.end();num++){
+    srch_rng newone(*num,cases);
+    bool flag=false;
+    for( auto sr=srng.begin();sr!=srng.end();sr++){
+      // if the ranges overlap
+      if( sr->overlap(newone)){
+	sr->merge(newone);
+	flag=true;
+	if(verbose)
+	  std::cout << "Combining " << std::hexfloat << *num
+		    << " into a test range with " << std::hexfloat
+		    << sr->num() << " since they overlap" << std::endl;
+	break;
+      }
+    }
+    if(!flag){ // create a new search range
+      srng.push_back(newone);
+      if(verbose)
+	std::cout << "New search range for " << std::hexfloat << *num << " ("
+		  << newone.begin() << '-' << newone.end() << ')' << std::endl;
+    }
+  }
+}
+
+srch_rng::srch_rng(double num, unsigned cases):b(num),e(num){
+  nums.push_back(num);
+  for(unsigned i=0;i<cases;i++){
+    b=std::nexttoward(b,-std::numeric_limits<double>::max());
+    e=std::nexttoward(e, std::numeric_limits<double>::max());
   }
 }

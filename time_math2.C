@@ -12,8 +12,6 @@
 #include <utility>
 #include <vector>
 #include <algorithm>
-#include <limits>
-#include <cmath>
 
 #include "libmb.h"
 
@@ -234,74 +232,21 @@ unsigned range_sort(std::vector< std::pair<double,uint64_t> > &results,
 
 void targeted_walk( const std::vector< double> &numbers,
 		    std::vector<struct range> &ranges){
-
-  pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-
-  class srch_rng{
-  public:
-    double begin;
-    double end;
-    std::vector<double> nums;
-  };
-
   std::vector<srch_rng> srng;
-
-  unsigned idx=0;
-  /* numbers will get added to the list to expand the size of the ranges
-     we don't want to continue the test beyond the initial range of numbers
-     otherwise the test goes on too long */
-  unsigned orig_numbers=numbers.size();
-  for( auto num=numbers.begin();num!=numbers.end();num++,idx++){
-    if( idx>orig_numbers)
-      break;
-
-    srch_rng newone;
-    newone.nums.push_back(*num);
-    newone.begin=newone.end=*num;
-    for(unsigned i=0;i<cases;i++){
-      newone.begin=std::nexttoward(newone.begin,
-				   -std::numeric_limits<double>::max());
-      newone.end=std::nexttoward(newone.end,
-				 std::numeric_limits<double>::max());
-      assert(newone.begin<newone.end);
-    }
-      
-    bool flag=false;
-    for( auto sr=srng.begin();sr!=srng.end();sr++){
-      // if the ranges overlap
-      if( (newone.begin>=sr->begin && newone.begin<sr->end) ||
-	  (newone.end>sr->begin && newone.end<=sr->end)) {
-	sr->begin=std::min(sr->begin,newone.begin);
-	sr->end=std::max(sr->end,newone.end);
-	sr->nums.push_back(*num);
-	flag=true;
-	if(verbose)
-	  std::cout << "Combining " << std::hexfloat << *num
-		    << " into a test range with " << std::hexfloat 
-		    << sr->nums[0] << " since they overlap" << std::endl;
-	break;
-      }
-    }
-    if(!flag){ // create a new search range
-      srng.push_back(newone);
-      if(verbose)
-	std::cout << "New search range for " << std::hexfloat << *num << " ("
-		  << newone.begin << '-' << newone.end << ')' << std::endl;
-    }
-  }
+  make_srngs( numbers, srng, cases, verbose);
   
-
+  pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
   pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
   unsigned done=0;
  #pragma omp parallel for
   for(unsigned int i=0;i<srng.size();i++){
     std::vector< std::pair<double,uint64_t> > results;
-    double cur=srng[i].begin;
-    for( unsigned int j=0;j<2*cases;
-	 j++,cur=std::nexttoward(cur, std::numeric_limits<double>::max())){
+    double cur=srng[i].begin();
+    do{
       uint64_t t=time_func(iterations,cur);
       results.push_back(std::pair<double,uint64_t>(cur, t));
-    }
+      cur=std::nexttoward(cur, std::numeric_limits<double>::max());
+    }while(cur<srng[i].end());
 
     bool flag;
     do{
@@ -323,8 +268,8 @@ void targeted_walk( const std::vector< double> &numbers,
     pthread_mutex_lock(&m);
     std::cout << ++done;
     pthread_mutex_unlock(&m);
-    std::cout << '/' << srng.size() << ' ' << std::hexfloat << srng[i].begin
-	      << '-' << srng[i].end << std::endl;
+    std::cout << '/' << srng.size() << ' ' << std::hexfloat << srng[i].begin()
+	      << '-' << srng[i].end() << std::endl;
     if(verbose){
       pthread_mutex_lock(&mutex);
       for( auto it=ranges.begin();it!=ranges.end();it++)
