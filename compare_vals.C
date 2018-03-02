@@ -122,18 +122,26 @@ int main(int argc, char **argv){
 	tested++;
 	double r1=func(cur);
 	double r2=altfunc(cur);
-	if(r1!=r2 &&
-	   !(oneulp && 
-	     (std::nexttoward(r1, std::numeric_limits<double>::max())==r2 ||
-	      std::nexttoward(r1, -std::numeric_limits<double>::max())==r2))){
-	  bad_ones++;
-	  worst=std::max(worst, abs(r1-r2));
-	  if(dumpnums){
-	    pthread_mutex_lock(&m);
-	    if(std::find(numbers.begin(),numbers.end(),cur)
-	       ==numbers.end())
-	      numbers.push_back(cur);
-	    pthread_mutex_unlock(&m);
+	if(r1!=r2){
+	  double r1_plus=std::nexttoward(r1,
+					 std::numeric_limits<double>::max());
+	  double r1_minus=std::nexttoward(r1,
+					  -std::numeric_limits<double>::max());
+	  if(oneulp && (r1_plus==r2 || r1_minus==r2)){
+	    if(verbose)
+	      std::cout << funcname << '(' << std::hexfloat << cur << ") = "
+			<< r1 << ", "	<< r2 << " difference: "
+			<< abs(r1-r2) << " is " << (r1_plus==r2?'+':'-')
+			<< "1 ULP" << std::endl;
+	  } else {
+	    bad_ones++;
+	    worst=std::max(worst, abs(r1-r2));
+	    if(dumpnums){
+	      pthread_mutex_lock(&m);
+	      if(std::find(numbers.begin(),numbers.end(),cur)==numbers.end())
+		numbers.push_back(cur);
+	      pthread_mutex_unlock(&m);
+	    }
 	  }
 	}
 	cur=std::nexttoward(cur, std::numeric_limits<double>::max());
@@ -145,9 +153,9 @@ int main(int argc, char **argv){
       }
     }
     for( auto cur=results.begin();cur!=results.end();cur++){
-      std::cout << "Between: " << std::hexfloat
-		<< cur->rng.begin() << '-' << cur->rng.end() << '\t'
-		<< cur->bad << " bad values\tmax error: "
+      std::cout << "Between: " << std::hexfloat	<< cur->rng.begin()
+		<< " - " << cur->rng.end() << '\t' << cur->bad
+		<< " bad values\tmax error: "
 		<< cur->worst << std::endl;
     }
     std::cout << "-------" << std::endl;
@@ -159,10 +167,18 @@ int main(int argc, char **argv){
     double r1=func(numbers[i]);
     double r2=altfunc(numbers[i]);
     if(r1!=r2){
-      bad_ones++;
-      std::cout << funcname << '(' << std::hexfloat << numbers[i]
-		<< ") = " << r1 << ", "	<< r2 << " difference: "
-		<< abs(r1-r2) << std::endl;
+      double r1_plus=std::nexttoward(r1, std::numeric_limits<double>::max());
+      double r1_minus=std::nexttoward(r1, -std::numeric_limits<double>::max());
+      if(!oneulp || !(r1_plus==r2 || r1_minus==r2)){
+	bad_ones++;
+	std::cout << funcname << '(' << std::hexfloat
+		  << numbers[i] << ") = " << r1 << ", "	<< r2 << " difference: "
+		  << abs(r1-r2) << std::endl << "\tr1+1="
+		  << std::nexttoward(r1, std::numeric_limits<double>::max())
+		  << std::endl << "\tr1-1="
+		  << std::nexttoward(r1, -std::numeric_limits<double>::max())
+		  << std::endl;
+      }
     }
   }
   std::cout << bad_ones << '/' << numbers.size() << " failed ["
