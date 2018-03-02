@@ -173,16 +173,15 @@ int main(int argc, char **argv){
 	bad_ones++;
 	std::cout << funcname << '(' << std::hexfloat
 		  << numbers[i] << ") = " << r1 << ", "	<< r2 << " difference: "
-		  << abs(r1-r2) << std::endl << "\tr1+1="
-		  << std::nexttoward(r1, std::numeric_limits<double>::max())
-		  << std::endl << "\tr1-1="
-		  << std::nexttoward(r1, -std::numeric_limits<double>::max())
-		  << std::endl;
+		  << abs(r1-r2) << std::endl;
       }
     }
   }
-  std::cout << bad_ones << '/' << numbers.size() << " failed ["
-	    << std::setprecision(4) << std::defaultfloat
-	    << bad_ones*100.0/numbers.size() << "%]" << std::endl;
+  std::cout << bad_ones << '/' << numbers.size() << " failed" << std::endl;
+  if(dumpnums){
+    std::cout << "---------" << std::endl << std::hexfloat;
+    for( auto num=numbers.begin(); num!=numbers.end();num++)
+      std::cout << *num << std::endl;
+  }
   exit(0);
 }
