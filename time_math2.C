@@ -41,9 +41,9 @@ static inline void Gettimeofday(struct timeval &ts){
   }
 }
 
-static uint64_t time_func (int count, double &val)
+static uint64_t time_func (int count, double val, double &sum)
 {
-  double sum = 0.0;
+  sum=0.0;
   struct timeval start_ts, end_ts;
   
   Gettimeofday(start_ts);
@@ -57,7 +57,6 @@ static uint64_t time_func (int count, double &val)
   suseconds_t usecs = end_ts.tv_usec-start_ts.tv_usec;
   time_t secs = end_ts.tv_sec-start_ts.tv_sec;
   useconds = secs*1000000+usecs;
-  val=sum;
   return useconds;
 }
 
@@ -193,7 +192,8 @@ void random_spray(std::vector<struct range> &ranges){
       }
       
       double b=a;
-      uint64_t time=time_func(iterations, a);
+      double sum;
+      uint64_t time=time_func(iterations, a, sum);
       pthread_mutex_lock(&mutex);
       results.push_back(std::pair<double,uint64_t>(b, time));
       pthread_mutex_unlock(&mutex);
@@ -258,12 +258,13 @@ void targeted_walk( const std::vector< double> &numbers,
  #pragma omp parallel for
   for(unsigned int i=0;i<srng.size();i++){
     std::vector< std::pair<double,uint64_t> > results;
+    double sum;
     double cur=srng[i].begin();
     do{
-      uint64_t t=time_func(iterations,cur);
+      uint64_t t=time_func(iterations,cur, sum);
       results.push_back(std::pair<double,uint64_t>(cur, t));
       cur=std::nexttoward(cur, std::numeric_limits<double>::max());
-    }while(cur<srng[i].end());
+    } while(cur<srng[i].end());
 
     bool flag;
     do{
@@ -305,8 +306,8 @@ void setup_ranges( std::vector<struct range> &ranges){
 #pragma omp parallel for
   for( int i=0;i<numbers.size();i++){
     double b=numbers[i];
-    //this overwrites the variable b with the sum
-    uint64_t time=time_func(iterations, b);
+    double sum;
+    uint64_t time=time_func(iterations, b, sum);
 
     pthread_mutex_lock(&mutex);
     results.push_back(std::pair<double,uint64_t>(numbers[i],time));
