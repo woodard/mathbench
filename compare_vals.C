@@ -19,6 +19,12 @@ double (*func)(double)=&exp;
 int main(int argc, char **argv){
   int c=0;
   static struct option long_options[] = {
+    /* While the standard has been 1/2 ULP for x86_64 for some time it
+       has been argued that it is acceptable to only maintain 1 ULP of
+       accuracy in the tracendental functions being explored. Therefore, 
+       this filters out the cases where the result is within 1ULP as opposed 
+       to 1/2 ULP by allowing values which are adacent to the axxurate one. */
+    {"oneulp",         required_argument, 0, '1'},
     {"altfuncname",    required_argument, 0, 'a'},
     {"cases",          required_argument, 0, 'c'},
     {"dumpnumbers",    no_argument,       0, 'd'},
@@ -33,13 +39,17 @@ int main(int argc, char **argv){
   unsigned cases=20000;
   bool targeted=false;
   bool dumpnums=false;
+  bool oneulp=false;
 
   while (c!=-1) {
     int this_option_optind = optind ? optind : 1;
     int option_index = 0;
-    c = getopt_long(argc, argv, "a:c:df:ntv",
+    c = getopt_long(argc, argv, "1a:c:df:ntv",
 		    long_options, &option_index);
     switch (c) {
+    case '1':
+      oneulp=true;
+      break;
     case 'a':
       altfuncname=optarg;
       break;
@@ -104,24 +114,27 @@ int main(int argc, char **argv){
     std::vector< res > results;
  #pragma omp parallel for
     for(unsigned int i=0;i<srng.size();i++){
-      double cur=srng[i].begin();
       unsigned int bad_ones=0;
       unsigned int tested=0;
       double worst=0.0;
+      double cur=srng[i].begin();
       do{
 	tested++;
 	double r1=func(cur);
 	double r2=altfunc(cur);
-	if(r1!=r2){
-	   bad_ones++;
-	   worst=std::max(worst, abs(r1-r2));
-	   if(dumpnums){
-	     pthread_mutex_lock(&m);
-	     if(std::find(numbers.begin(),numbers.end(),cur)
-		==numbers.end())
-	       numbers.push_back(cur);
-	     pthread_mutex_unlock(&m);
-	   }
+	if(r1!=r2 &&
+	   !(oneulp && 
+	     (std::nexttoward(r1, std::numeric_limits<double>::max())==r2 ||
+	      std::nexttoward(r1, -std::numeric_limits<double>::max())==r2))){
+	  bad_ones++;
+	  worst=std::max(worst, abs(r1-r2));
+	  if(dumpnums){
+	    pthread_mutex_lock(&m);
+	    if(std::find(numbers.begin(),numbers.end(),cur)
+	       ==numbers.end())
+	      numbers.push_back(cur);
+	    pthread_mutex_unlock(&m);
+	  }
 	}
 	cur=std::nexttoward(cur, std::numeric_limits<double>::max());
       } while(cur<srng[i].end());
