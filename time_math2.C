@@ -23,16 +23,16 @@ unsigned samplerate=1000;
 bool nonnormals=false;
 bool verbose=false;
 
-double (*func)(double)=&exp;
-
 std::vector< double> numbers;
 
-static void random_spray(std::vector<struct range> &ranges);
-static void targeted_walk( const std::vector< double> &numbers,
-			   std::vector<struct range> &ranges);
+static void random_spray(double (*func)(double), std::vector<struct range> &ranges);
+static void targeted_walk(double (*func)(double),
+			  const std::vector< double> &numbers,
+			  std::vector<struct range> &ranges);
 static unsigned range_sort(std::vector< std::pair<double,uint64_t> > &results,
 			   std::vector<struct range> &ranges);
-static void setup_ranges( std::vector<struct range> &ranges);
+static void setup_ranges(double (*func)(double),
+			 std::vector<struct range> &ranges);
 
 static inline void Gettimeofday(struct timeval &ts){
   if (gettimeofday (&ts, NULL) != 0) {
@@ -41,7 +41,8 @@ static inline void Gettimeofday(struct timeval &ts){
   }
 }
 
-static uint64_t time_func (int count, double val, double &sum)
+static uint64_t time_func (double (*func)(double), int count, double val,
+			   double &sum)
 {
   sum=0.0;
   struct timeval start_ts, end_ts;
@@ -95,7 +96,8 @@ int main(int argc, char **argv)
     {0,                0,                 0,  0 }
   };
   
-  void *altlibm=NULL;
+  const char *funcname="exp";
+  const char *libmname="libm.so";
   while (c!=-1) {
     int this_option_optind = optind ? optind : 1;
     int option_index = 0;
@@ -106,17 +108,10 @@ int main(int argc, char **argv)
     case -1:
       break; // also terminates the while loop
     case 'A':
-      altlibm=dlmopen(LM_ID_NEWLM, optarg, RTLD_LAZY);
-      if( altlibm==NULL){
-	std::cerr << "Loading of alternative libm implementation failed: "
-		  << dlerror() << std::endl;
-	exit(3);
-      }
+      libmname=optarg;
       break;
     case 'a':
-      func=reinterpret_cast<double (*)(double)>(dlsym(altlibm,optarg));
-      /* yeah there should be some error checking here but if this didn't
-	 work then the program will crash anyway */
+      funcname=optarg;
       break;
     case 'i':
       sscanf(optarg,"%ld",&iterations);
@@ -140,7 +135,7 @@ int main(int argc, char **argv)
       verbose=true;
       break;
     case 'f':
-      func=getFunc(optarg);
+      funcname=optarg;
       break;
     case 'c':
       sscanf(optarg,"%ld",&cases);
@@ -155,15 +150,29 @@ int main(int argc, char **argv)
 
   read_numbers(argv[optind], nonnormals, numbers);
 
+  void *libm=dlmopen(LM_ID_NEWLM,libmname , RTLD_LAZY);
+  if(libm==NULL){
+    std::cerr << "Loading of libm implementation failed: " << dlerror()
+	      << std::endl;
+    exit(3);
+  }
+  double (*func)(double)=
+    reinterpret_cast<double (*)(double)>(dlsym(libm,funcname));
+  if(func==NULL){
+    std::cerr << "Could not locate the function " << funcname << ' '
+	      << dlerror() << std::endl;
+    exit(4);
+  }
+
   std::vector<struct range> ranges;
-  setup_ranges( ranges);
+  setup_ranges(func, ranges);
     
   if(randspray)
-    random_spray( ranges);
+    random_spray(func, ranges);
   if(targeted)
-    targeted_walk( numbers, ranges);
+    targeted_walk(func, numbers, ranges);
   if(targeted || randspray)
-    setup_ranges( ranges); // print the ranges one last time.
+    setup_ranges(func, ranges); // print the ranges one last time.
   if(dumpnums){
     std::cout << "---------" << std::endl << std::hexfloat;
     for( auto num=numbers.begin(); num!=numbers.end();num++)
@@ -172,7 +181,7 @@ int main(int argc, char **argv)
 }
 
 // this test is too random and really only seemed to pick out the denormals
-void random_spray(std::vector<struct range> &ranges){
+void random_spray(double (*func)(double), std::vector<struct range> &ranges){
   pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
   std::vector< std::pair<double,uint64_t> > results;
   
@@ -193,7 +202,7 @@ void random_spray(std::vector<struct range> &ranges){
       
       double b=a;
       double sum;
-      uint64_t time=time_func(iterations, a, sum);
+      uint64_t time=time_func(func, iterations, a, sum);
       pthread_mutex_lock(&mutex);
       results.push_back(std::pair<double,uint64_t>(b, time));
       pthread_mutex_unlock(&mutex);
@@ -203,7 +212,7 @@ void random_spray(std::vector<struct range> &ranges){
     if( dumped*100/results.size()>20){
       std::cout << "Dumped: " << dumped << '/' << results.size()
 		<< " Resampling ranges" << std::endl;
-      setup_ranges( ranges);
+      setup_ranges(func, ranges);
     }
     results.clear();
 
@@ -247,8 +256,8 @@ unsigned range_sort(std::vector< std::pair<double,uint64_t> > &results,
   return dumped;
 }
 
-void targeted_walk( const std::vector< double> &numbers,
-		    std::vector<struct range> &ranges){
+void targeted_walk(double (*func)(double),  const std::vector< double> &numbers,
+		   std::vector<struct range> &ranges){
   std::vector<srch_rng> srng;
   make_srngs( numbers, srng, cases, verbose);
   
@@ -261,7 +270,7 @@ void targeted_walk( const std::vector< double> &numbers,
     double sum;
     double cur=srng[i].begin();
     do{
-      uint64_t t=time_func(iterations,cur, sum);
+      uint64_t t=time_func(func, iterations,cur, sum);
       results.push_back(std::pair<double,uint64_t>(cur, t));
       cur=std::nexttoward(cur, std::numeric_limits<double>::max());
     } while(cur<srng[i].end());
@@ -278,7 +287,7 @@ void targeted_walk( const std::vector< double> &numbers,
 	std::cout << "Dumped: " << dumped << '/' << results.size()
 		  << " Resampling ranges" << std::endl;
 	pthread_mutex_lock(&mutex);
-	setup_ranges( ranges);
+	setup_ranges(func, ranges);
 	pthread_mutex_unlock(&mutex);
       }
     }while(flag==false);
@@ -298,7 +307,7 @@ void targeted_walk( const std::vector< double> &numbers,
   }
 }
 
-void setup_ranges( std::vector<struct range> &ranges){
+void setup_ranges(double (*func)(double),  std::vector<struct range> &ranges){
   std::vector< std::pair<double,uint64_t> > results;
   pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -307,7 +316,7 @@ void setup_ranges( std::vector<struct range> &ranges){
   for( int i=0;i<numbers.size();i++){
     double b=numbers[i];
     double sum;
-    uint64_t time=time_func(iterations, b, sum);
+    uint64_t time=time_func(func, iterations, b, sum);
 
     pthread_mutex_lock(&mutex);
     results.push_back(std::pair<double,uint64_t>(numbers[i],time));

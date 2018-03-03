@@ -1,5 +1,5 @@
 CXXFLAGS=-g -O2 -fopenmp -D_GNU_SOURCE
-LDFLAGS=-lm -ldl
+LDFLAGS=-ldl
 INTPATH=/usr/tce/packages/intel/intel-18.0.1/lib/intel64_lin/
 
 all: time_math2 compare_vals
@@ -26,11 +26,6 @@ libmb-noomp.o: libmb.C libmb.h
 
 time_math2-noomp.o: time_math2.C libmb.h
 	g++ -g -O2 -D_GNU_SOURCE -c time_math2.C -o time_math2-noomp.o
-
-#use intel math libraries
-time_math2.mkl: time_math2.o libmb.o
-	g++ $(CXXFLAGS) time_math2.o libmb.o -o time_math2 -L$(INTPATH) \
-            -Wl,-rpath,$(INTPATH) -limf -lintlc
 
 # utility
 clean:
