@@ -319,6 +319,54 @@ unsigned ranges::range_sort(result_t &results, parameters &numbers,
   return dumped;
 }
 
-void ranges::setup_ranges(timeable &tm, parameters &numbers){
+void ranges::setup_ranges(timeable &tm, parameters &numbers,
+			  runtime_params &params){
+  result_t results;
+  pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
+  free();
+#pragma omp parallel for
+  for( int i=0;i<numbers.size();i++){
+    param_t *b=numbers[i].clone();
+    double sum;
+    uint64_t time=function.time_func(param.iterations, b, sum);
+
+    pthread_mutex_lock(&mutex);
+    results.push_back(b,time);
+    pthread_mutex_unlock(&mutex);
+  }
+
+  // end parallel region
+  std::sort(results.begin(), results.end(),
+            [](auto &left, auto &right) { return left.second < right.second; }
+            );
+
+  unsigned count=1;
+  unsigned sum=results[0].second,begin=0;
+  for( unsigned i=1;i<results.size()-1;i++){ // intentionally starts at 1
+    auto lowgap=results[i].second-results[i-1].second;
+    auto highgap=results[i+1].second-results[i].second;
+    auto partmean=sum/count/20; // 20=5% which is arbitrary but works
+    if( (lowgap<=highgap && highgap<partmean) || lowgap<=partmean ) { 
+      count++;
+      sum+=results[i].second;
+    } else { // closer to next value
+      if(count>2)
+        //if it is this small it probably isn't a plateau it is a transition
+        ranges.push_back(range(begin,i-1,count,sum));
+      begin=i;
+      count=1;
+      sum=results[i].second;
+    }
+  }
+  std::vector<range>::push_back(range(begin,results.size()-1,count,sum));
+
+  for( auto it=ranges.begin();it!=ranges.end();it++){
+    it->min=results[it->begin].second;
+    it->max=results[it->end].second;
+  }
+  std::cout << std::endl << ranges.size() << " Ranges: " << std::endl
+	    << *this << std::endl;
+  clear_counts();
 }
+
