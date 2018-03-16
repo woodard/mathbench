@@ -1,4 +1,4 @@
-#include <stdio.h
+#include <stdio.h>
 #include <dlfcn.h>
 #include <stdio.h>
 #include <sys/time.h>
@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <limits>
 #include <cmath>
+#include <random>
 
 #include "libmb.h"
 
@@ -21,8 +22,8 @@ parameters::parameters(unsigned params, const char *filename, bool nonnormals){
   while (std::getline(infile, line)){
     if(line[0]=='#')
       continue;
-    timable::param_type newone;
-    if(param==1)
+    timeable::param_type *newone;
+    if(params==1)
       newone=new timeable::dbl_param(line);
     else
       newone=new timeable::twodbl_param(line);
@@ -35,14 +36,14 @@ parameters::parameters(unsigned params, const char *filename, bool nonnormals){
       std::cout << "Discarding duplicate: " << line << std::endl;
       delete newone;
     }
-    numbers.push_back(newone);
+    std::vector<timeable::param_type *>::push_back(newone);
   }
 }
 
 bool parameters::push_back(timeable::param_type *newone){
   if(std::find_if(begin(), end(),
-	       [](const timeable::param_type *s){ return *s==*newone})
-     != numbers.end())
+		  [newone](const timeable::param_type *s){ return *s==*newone;})
+     != end())
     return false;
   std::vector<timeable::param_type *>::push_back(newone);
   return true;
@@ -50,8 +51,8 @@ bool parameters::push_back(timeable::param_type *newone){
 
 void make_srngs(const parameters &nums, std::vector<srch_rng> &srng,
 		 unsigned cases, bool verbose){
-  for( auto num=numbers.begin();num!=numbers.end();num++){
-    srch_rng newone(*num,cases);
+  for( auto num=nums.begin();num!=nums.end();num++){
+    srch_rng newone(*dynamic_cast<timeable::dbl_param*>(*num),cases);
     bool flag=false;
     for( auto sr=srng.begin();sr!=srng.end();sr++){
       // if the ranges overlap
@@ -74,11 +75,11 @@ void make_srngs(const parameters &nums, std::vector<srch_rng> &srng,
   }
 }
 
-srch_rng::srch_rng(double num, unsigned cases):b(num),e(num){
-  nums.push_back(num);
+srch_rng::srch_rng(timeable::dbl_param &num, unsigned cases):b(num),e(num){
+  nums.push_back(new timeable::dbl_param(num));
   for(unsigned i=0;i<cases;i++){
-    b=std::nexttoward(b,-std::numeric_limits<double>::max());
-    e=std::nexttoward(e, std::numeric_limits<double>::max());
+    b=std::nexttoward(b.xval(),-std::numeric_limits<double>::max());
+    e=std::nexttoward(e.xval(), std::numeric_limits<double>::max());
   }
 }
 
@@ -90,7 +91,7 @@ static inline void Gettimeofday(struct timeval &ts){
   }
 }
 
-timeable::timable(const char *libmname, const char *funcname,
+timeable::timeable(const char *libmname, const char *funcname,
 		  const char *altname){
   void *libm=dlmopen(LM_ID_NEWLM,libmname , RTLD_LAZY);
   void *raw_func;
@@ -108,7 +109,7 @@ timeable::timable(const char *libmname, const char *funcname,
 	      << dlerror() << std::endl;
     throw BAD_FNAME;
   }
-  string fn(funcname);
+  std::string fn(funcname);
   if( fn=="tan"   || fn=="cos"  || fn=="sin"   || fn=="acosh" || fn=="acos" ||
       fn=="asinh" || fn=="asin" || fn=="atanh" || fn=="cosh"  || fn=="exp2" ||
       fn=="log2"  || fn=="log"  || fn=="rint"  || fn=="sinh"  || fn=="sqrt" ||
@@ -122,31 +123,33 @@ timeable::timable(const char *libmname, const char *funcname,
     throw BAD_FUNC;
 }
 
-uint64_t timable::time_func(unsigned count, bool nonnormals,
+uint64_t timeable::time_func(unsigned count, bool nonnormals, std::mt19937 &gen,
 			    const param_type &min, const param_type &max,
 			    double &sum, param_type *ret){
-  double min=min.xval();
-  double max=max.xval();
+  double dmin=min.xval();
+  double dmax=max.xval();
+  std::uniform_real_distribution<double> dis(dmin,dmax);
   double x;
   do{
-    x=std::uniform_real_distribution<double>(min,max);
-  }while(nonromals==true || !std::isnormal(x));
+    x=dis(gen);
+  }while(nonnormals==true || !std::isnormal(x));
 
   if(num_params()==1)
     ret=new dbl_param(x);
   else{
+    dmin=dynamic_cast<const twodbl_param&>(min).yval();    
+    dmax=dynamic_cast<const twodbl_param&>(max).yval();
     double y;
-    min=dynamic_cast<twodbl_param&>(min).yval();    
-    max=dynamic_cast<twodbl_param&>(max).yval();
+    std::uniform_real_distribution<double> dis2(dmin,dmax);
     do{
-      y=std::uniform_real_distribution<double>(min,max);
-    }while(nonromals==true || !std::isnormal(y));
+      y=dis2(gen);
+    }while(nonnormals==true || !std::isnormal(y));
     ret=new twodbl_param(x,y);
   }
-  return time_func(count,*p,sum);
+  return time_func(count,*ret,sum);
 }
 
-uint64_t timable::time_func(unsigned count, const param_type &val, double &sum){
+uint64_t timeable::time_func(unsigned count, const param_type &val, double &sum){
   sum=0.0;
   struct timeval start_ts, end_ts;
 
@@ -161,4 +164,14 @@ uint64_t timable::time_func(unsigned count, const param_type &val, double &sum){
   time_t secs = end_ts.tv_sec-start_ts.tv_sec;
   useconds = secs*1000000+usecs;
   return useconds;
+}
+
+std::ostream &operator<<(std::ostream &os, const timeable::param_type &w){
+     return w.write(os);
+}
+
+std::ostream &operator<<(std::ostream &os, const parameters &w){
+  std::cout << "---------" << std::endl << std::hexfloat;
+  for( auto num=w.begin(); num!=w.end();num++)
+    std::cout << *num << std::endl; 
 }

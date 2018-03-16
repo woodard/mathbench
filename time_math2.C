@@ -10,19 +10,20 @@
 
 #include "libmb.h"
 
-class ranges:public std::vector<struct range>{
-  class range{
-  public:
-    unsigned begin;
-    unsigned end;
-    unsigned count;
-    unsigned sum;
-    uint64_t min,max;
+class range{
+public:
+  unsigned begin;
+  unsigned end;
+  unsigned count;
+  unsigned sum;
+  uint64_t min,max;
 
-    range(){}
-    range(unsigned b, unsigned e, unsigned c, unsigned s):
-      begin(b),end(e),count(c),sum(s){}
-  };
+  range(){}
+  range(unsigned b, unsigned e, unsigned c, unsigned s):
+    begin(b),end(e),count(c),sum(s){}
+};
+
+class ranges:public std::vector<range>{
 public:  
   typedef std::pair<timeable::param_type *, uint64_t> aresult;
   class result_t:public std::vector<aresult>{
@@ -41,7 +42,8 @@ public:
   
   ranges(timeable &tm, parameters &numbers){ setup_ranges(tm,numbers); }
   void setup_ranges(timeable &tm, parameters &numbers);
-  unsigned range_sort(const result_t &results,unsigned samplerate);
+  unsigned range_sort(result_t &results, parameters &numbers,
+		      unsigned samplerate);
   void clear_counts(){
     std::for_each(begin(),end(),[](range &e){e.count=0;});}
 
@@ -200,7 +202,8 @@ void random_spray(timeable &function, ranges &rng, runtime_params &params,
 		  parameters &numbers, timeable::param_type &min,
 		  timeable::param_type &max){
   pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-  std::default_random_engine e;
+  std::random_device rd;  
+  std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
   ranges::result_t results;
   
   for( int j=0;j<params.num_sets;j++){
@@ -209,13 +212,13 @@ void random_spray(timeable &function, ranges &rng, runtime_params &params,
       timeable::param_type *p;
       double sum;
       uint64_t time=function.time_func(params.iterations, params.nonnormals,
-				       min, max, sum, p);
+				       gen, min, max, sum, p);
       pthread_mutex_lock(&mutex);
       results.push_back( p,time); 
       pthread_mutex_unlock(&mutex);
     }
 
-    unsigned dumped=rng.range_sort(results, params.samplerate);
+    unsigned dumped=rng.range_sort(results, numbers, params.samplerate);
     if( dumped*100/results.size()>20){
       std::cout << "Dumped: " << dumped << '/' << results.size()
 		<< " Resampling ranges" << std::endl;
@@ -237,7 +240,7 @@ void targeted_walk(timeable &function, ranges &rng, parameters &numbers,
   pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
   pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
   unsigned done=0;
- #pragma omp parallel for
+#pragma omp parallel for
   for(unsigned int i=0;i<srng.size();i++){
     ranges::result_t results;
     double sum;
@@ -253,7 +256,7 @@ void targeted_walk(timeable &function, ranges &rng, parameters &numbers,
     do{
       flag=true;
       pthread_mutex_lock(&mutex);
-      unsigned dumped=rng.range_sort(results, params.samplerate);
+      unsigned dumped=rng.range_sort(results, numbers, params.samplerate);
       pthread_mutex_unlock(&mutex);
       
       if( dumped*100/results.size()>20){ //20% is an arbitrary
@@ -293,22 +296,20 @@ std::ostream &operator<<(std::ostream &os, const ranges &r){
               << std::endl;
 }
 
-unsigned ranges::range_sort(const result_t &results, unsigned samplerate){
+unsigned ranges::range_sort(result_t &results, parameters &numbers,
+			    unsigned samplerate){
   unsigned dumped=0;
 
   for( auto it=results.begin();it!=results.end();it++){
     if(it->second==0)
       continue;
-    if( sscanf(str(),"%lf",&x) !=1 )
-      throw BAD_CONSTRUCT;
-
     bool flag=0;
     for( auto range=begin();range!=end();range++){
       if(it->second>=range->min && it->second<=range->max){
 	range->count++;
 	flag=true;
 	break;
-      } 
+      }
     }
     if(!flag){ // didn't fit into a range
       dumped++;

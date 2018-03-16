@@ -4,6 +4,7 @@
 #include <vector>
 #include <cmath>
 #include <string>
+#include <random>
 
 class timeable{
 public:
@@ -75,7 +76,7 @@ private:
     virtual double call( const param_type &x){
       return func(dynamic_cast<const dbl_param&>(x).xval()); }
   };
-  class twoparam_func{
+  class twoparam_func: public func_type{
     double (*func)(double,double);
   public:
     twoparam_func(void *raw_func){
@@ -94,13 +95,10 @@ public:
   timeable(const char *libmname, const char *funcname, const char *altname);
   unsigned num_params(){return params;}
   uint64_t time_func(unsigned count, const param_type &val, double &sum);
-  uint64_t time_func(unsigned count, bool nonnormals, const param_type &min,
-		     const param_type &max, double &sum, param_type *ret);
+  uint64_t time_func(unsigned count, bool nonnormals, std::mt19937 &gen,
+		     const param_type &min, const param_type &max, double &sum,
+		     param_type *ret);
 };
-
-std::ostream &operator<<(std::ostream &os, const timeable::param_type &w){
-     return w.write(os);
-}
 
 /* ---------------- */
 class parameters:public std::vector<timeable::param_type *>{
@@ -110,11 +108,7 @@ public:
   bool push_back(timeable::param_type *newone);
 };
 
-std::ostream &operator<<(std::ostream &os, const parameters &w){
-  std::cout << "---------" << std::endl << std::hexfloat;
-  for( auto num=w.begin(); num!=w.end();num++)
-    std::cout << *num << std::endl; 
-}
+std::ostream &operator<<(std::ostream &os, const parameters &w);
 
 /* This really can only apply to single dimension functions. The
    operations for things like areas are not quite as simple as they
