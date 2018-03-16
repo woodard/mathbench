@@ -284,9 +284,6 @@ void targeted_walk(timeable &function, ranges &rng, parameters &numbers,
 
 /* ------------------------------- */
 
-//    it->min=results[it->begin];
-//    it->max=results[it->end];
-
 std::ostream &operator<<(std::ostream &os, const ranges &r){
   std::cout << std::endl << r.size() << " R: " << std::endl;
   for( auto it=r.begin();it!=r.end();it++)
@@ -322,3 +319,6 @@ unsigned ranges::range_sort(result_t &results, parameters &numbers,
   return dumped;
 }
 
+void ranges::setup_ranges(timeable &tm, parameters &numbers){
+
+}
