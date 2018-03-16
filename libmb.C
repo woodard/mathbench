@@ -1,5 +1,7 @@
-#include <math.h>
+#include <stdio.h
+#include <dlfcn.h>
 #include <stdio.h>
+#include <sys/time.h>
 
 #include <string>
 #include <iostream>
@@ -11,50 +13,7 @@
 
 #include "libmb.h"
 
-double (*getFunc(char *optarg))(double){
-  double (*func)(double);
-  std::string s(optarg);
-  if(s=="tan")
-    func=&tan;
-  else if(s=="cos")
-    func=&cos;
-  else if(s=="sin")
-    func=&sin;
-  else if(s=="acosh")
-    func=&acosh;
-  else if(s=="acos")
-    func=&acos;
-  else if(s=="asinh")
-    func=&asinh;
-  else if(s=="asin")
-    func=&asin;
-  else if(s=="atanh")
-    func=&atanh;
-  else if(s=="cosh")
-    func=&cosh;
-  else if(s=="exp2")
-    func=&exp2;
-  else if(s=="log2")
-    func=&log2;
-  else if(s=="log")
-    func=&log;
-  else if(s=="rint")
-    func=&rint;
-  else if(s=="sinh")
-    func=&sinh;
-  else if(s=="sqrt")
-    func=&sqrt;
-  else if(s=="tanh")
-    func=&tanh;
-  else if(s=="trunc")
-    func=&trunc;
-  else
-    exit(2);
-  return func;
-}
-
-void read_numbers(char *filename, bool nonnormals,
-		  std::vector< double> &numbers){
+parameters::parameters(unsigned params, const char *filename, bool nonnormals){
   std::ifstream infile(filename);
   // TODO: some error handling here
   std::string line;
@@ -62,21 +21,35 @@ void read_numbers(char *filename, bool nonnormals,
   while (std::getline(infile, line)){
     if(line[0]=='#')
       continue;
-    double a;
-    if( sscanf(line.c_str(),"%lf",&a) == 0)
-      continue;
-    if( std::find(numbers.begin(), numbers.end(), a) != numbers.end())
-      std::cout << "Discarding duplicate: " << line << std::endl;
+    timable::param_type newone;
+    if(param==1)
+      newone=new timeable::dbl_param(line);
     else
-      if(isnormal(a) || nonnormals==true)
-	numbers.push_back(a);
-      else
-	std::cout << "Discarding nonnormal: " << line << std::endl;
+      newone=new timeable::twodbl_param(line);
+    if(nonnormals==false && !newone->isnormal()){
+      std::cout << "Discarding nonnormal: " << line << std::endl;
+      delete newone;
+      continue;
+    }
+    if(push_back(newone)){
+      std::cout << "Discarding duplicate: " << line << std::endl;
+      delete newone;
+    }
+    numbers.push_back(newone);
   }
 }
 
-void make_srngs( const std::vector<double> &numbers,
-		 std::vector<srch_rng> &srng, unsigned cases, bool verbose){
+bool parameters::push_back(timeable::param_type *newone){
+  if(std::find_if(begin(), end(),
+	       [](const timeable::param_type *s){ return *s==*newone})
+     != numbers.end())
+    return false;
+  std::vector<timeable::param_type *>::push_back(newone);
+  return true;
+}
+
+void make_srngs(const parameters &nums, std::vector<srch_rng> &srng,
+		 unsigned cases, bool verbose){
   for( auto num=numbers.begin();num!=numbers.end();num++){
     srch_rng newone(*num,cases);
     bool flag=false;
@@ -107,4 +80,85 @@ srch_rng::srch_rng(double num, unsigned cases):b(num),e(num){
     b=std::nexttoward(b,-std::numeric_limits<double>::max());
     e=std::nexttoward(e, std::numeric_limits<double>::max());
   }
+}
+
+/* make this go away and use PAPI or Caliper or something */
+static inline void Gettimeofday(struct timeval &ts){
+  if (gettimeofday (&ts, NULL) != 0) {
+    fprintf (stderr, "Unable to get time of day, exiting\n");
+    exit (1);
+  }
+}
+
+timeable::timable(const char *libmname, const char *funcname,
+		  const char *altname){
+  void *libm=dlmopen(LM_ID_NEWLM,libmname , RTLD_LAZY);
+  void *raw_func;
+  if(libm==NULL){
+    std::cerr << "Loading of libm implementation failed: " << dlerror()
+	      << std::endl;
+    throw BAD_LIBM;
+  }
+  if(altname==NULL)
+    raw_func=dlsym(libm,funcname);
+  else
+    raw_func=dlsym(libm,altname);
+  if(raw_func==NULL){
+    std::cerr << "Could not locate the function " << funcname << ' '
+	      << dlerror() << std::endl;
+    throw BAD_FNAME;
+  }
+  string fn(funcname);
+  if( fn=="tan"   || fn=="cos"  || fn=="sin"   || fn=="acosh" || fn=="acos" ||
+      fn=="asinh" || fn=="asin" || fn=="atanh" || fn=="cosh"  || fn=="exp2" ||
+      fn=="log2"  || fn=="log"  || fn=="rint"  || fn=="sinh"  || fn=="sqrt" ||
+      fn=="tanh"  || fn=="trunc"){
+    params=1;
+    func=new single_func(raw_func);
+  } else if( fn=="pow"){
+    params=2;
+    func=new twoparam_func(raw_func);
+  } else
+    throw BAD_FUNC;
+}
+
+uint64_t timable::time_func(unsigned count, bool nonnormals,
+			    const param_type &min, const param_type &max,
+			    double &sum, param_type *ret){
+  double min=min.xval();
+  double max=max.xval();
+  double x;
+  do{
+    x=std::uniform_real_distribution<double>(min,max);
+  }while(nonromals==true || !std::isnormal(x));
+
+  if(num_params()==1)
+    ret=new dbl_param(x);
+  else{
+    double y;
+    min=dynamic_cast<twodbl_param&>(min).yval();    
+    max=dynamic_cast<twodbl_param&>(max).yval();
+    do{
+      y=std::uniform_real_distribution<double>(min,max);
+    }while(nonromals==true || !std::isnormal(y));
+    ret=new twodbl_param(x,y);
+  }
+  return time_func(count,*p,sum);
+}
+
+uint64_t timable::time_func(unsigned count, const param_type &val, double &sum){
+  sum=0.0;
+  struct timeval start_ts, end_ts;
+
+  Gettimeofday(start_ts);
+  for (int i=1; i <= count; i++)
+      sum += func->call(val);
+  Gettimeofday(end_ts);
+
+  /* Calculate run time */
+  uint64_t useconds;
+  suseconds_t usecs = end_ts.tv_usec-start_ts.tv_usec;
+  time_t secs = end_ts.tv_sec-start_ts.tv_sec;
+  useconds = secs*1000000+usecs;
+  return useconds;
 }
