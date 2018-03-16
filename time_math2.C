@@ -10,6 +10,19 @@
 
 #include "libmb.h"
 
+class runtime_params{
+public:
+  unsigned iterations;
+  unsigned cases;
+  unsigned num_sets;
+  unsigned samplerate;
+  bool nonnormals;
+  bool verbose;
+
+  runtime_params():iterations(100000),cases(20000),num_sets(5000),
+		   samplerate(1000),nonnormals(false),verbose(false){}
+};
+
 class range{
 public:
   unsigned begin;
@@ -40,27 +53,15 @@ public:
       std::vector<aresult>::push_back(a);}
   };
   
-  ranges(timeable &tm, parameters &numbers){ setup_ranges(tm,numbers); }
-  void setup_ranges(timeable &tm, parameters &numbers);
+  ranges(timeable &tm, parameters &numbers, runtime_params &params){
+    setup_ranges(tm,numbers, params); }
+  void setup_ranges(timeable &tm, parameters &numbers, runtime_params &params);
   unsigned range_sort(result_t &results, parameters &numbers,
 		      unsigned samplerate);
   void clear_counts(){
     std::for_each(begin(),end(),[](range &e){e.count=0;});}
 
   friend std::ostream &operator<<(std::ostream &os, const ranges &r);
-};
-
-class runtime_params{
-public:
-  unsigned iterations;
-  unsigned cases;
-  unsigned num_sets;
-  unsigned samplerate;
-  bool nonnormals;
-  bool verbose;
-
-  runtime_params():iterations(100000),cases(20000),num_sets(5000),
-		   samplerate(1000),nonnormals(false),verbose(false){}
 };
 
 static void random_spray(timeable &function, ranges &rng,
@@ -162,7 +163,7 @@ int main(int argc, char **argv)
 
   timeable function(libmname, funcname, altfname);
   parameters numbers(function.num_params(), argv[optind], params.nonnormals);
-  ranges rng(function, numbers);
+  ranges rng(function, numbers, params);
 
   if(randspray){
     timeable::param_type *min_val;
@@ -193,7 +194,8 @@ int main(int argc, char **argv)
     else
       abort();
   if(targeted || randspray)
-    rng.setup_ranges(function, numbers); // print the ranges one last time.
+    // print the ranges one last time.
+    rng.setup_ranges(function, numbers, params); 
   if(dumpnums) std::cout << numbers << std::endl;
   exit(0);
 }
@@ -222,7 +224,7 @@ void random_spray(timeable &function, ranges &rng, runtime_params &params,
     if( dumped*100/results.size()>20){
       std::cout << "Dumped: " << dumped << '/' << results.size()
 		<< " Resampling ranges" << std::endl;
-      rng.setup_ranges(function,numbers);
+      rng.setup_ranges(function,numbers, params);
     }
     results.free();
     
@@ -264,7 +266,7 @@ void targeted_walk(timeable &function, ranges &rng, parameters &numbers,
 	std::cout << "Dumped: " << dumped << '/' << results.size()
 		  << " Resampling ranges" << std::endl;
 	pthread_mutex_lock(&mutex);
-	rng.setup_ranges(function, numbers);
+	rng.setup_ranges(function, numbers, params);
 	pthread_mutex_unlock(&mutex);
       }
     }while(flag==false);
@@ -324,12 +326,11 @@ void ranges::setup_ranges(timeable &tm, parameters &numbers,
   result_t results;
   pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
-  free();
 #pragma omp parallel for
   for( int i=0;i<numbers.size();i++){
-    param_t *b=numbers[i].clone();
+    timeable::param_type *b=numbers[i]->clone();
     double sum;
-    uint64_t time=function.time_func(param.iterations, b, sum);
+    uint64_t time=tm.time_func(params.iterations, *b, sum);
 
     pthread_mutex_lock(&mutex);
     results.push_back(b,time);
@@ -353,7 +354,7 @@ void ranges::setup_ranges(timeable &tm, parameters &numbers,
     } else { // closer to next value
       if(count>2)
         //if it is this small it probably isn't a plateau it is a transition
-        ranges.push_back(range(begin,i-1,count,sum));
+        std::vector<range>::push_back(range(begin,i-1,count,sum));
       begin=i;
       count=1;
       sum=results[i].second;
@@ -361,12 +362,12 @@ void ranges::setup_ranges(timeable &tm, parameters &numbers,
   }
   std::vector<range>::push_back(range(begin,results.size()-1,count,sum));
 
-  for( auto it=ranges.begin();it!=ranges.end();it++){
+  for( auto it=std::vector<range>::begin();it!=std::vector<range>::end();it++){
     it->min=results[it->begin].second;
     it->max=results[it->end].second;
   }
-  std::cout << std::endl << ranges.size() << " Ranges: " << std::endl
-	    << *this << std::endl;
+  std::cout << std::endl << std::vector<range>::size() << " Ranges: "
+	    << std::endl << *this << std::endl;
   clear_counts();
 }
 
