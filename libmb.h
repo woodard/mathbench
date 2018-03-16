@@ -17,6 +17,7 @@ public:
     virtual double xval() const =0;
     virtual param_type *clone() const =0;
   };
+  // ---
   class dbl_param:public param_type{
     double x;
   public:
@@ -33,9 +34,7 @@ public:
     bool operator<=(const dbl_param &o) const {return x<=o.x;}
     dbl_param &operator=(const dbl_param &o) {
       if(&o != this) x=o.x;
-      return *this;
-    }
-    
+      return *this; }
     virtual bool operator==( const param_type &o)const{
       return x==dynamic_cast<const dbl_param&>(o).x;}
     virtual bool isnormal()const{ return std::isnormal(x);}
@@ -43,6 +42,7 @@ public:
     virtual double xval() const { return x;}
     virtual param_type *clone() const { return new dbl_param(*this);}
   };
+  // ---
   class twodbl_param: public param_type{
     double x,y;
   public:
@@ -55,7 +55,7 @@ public:
 	throw BAD_CONSTRUCT();} // Notice: a colon rather than a space
     virtual bool operator==( const param_type &o)const{
       const twodbl_param &other=dynamic_cast<const twodbl_param &>(o);
-      return x==other.x && y==other.y;}
+      return x==other.x && y==other.y;}    
     virtual bool isnormal()const{ return std::isnormal(x) && std::isnormal(y);}
     virtual std::ostream &write(std::ostream &dest) const {
       return (dest << x << ',' << y);}  
@@ -98,7 +98,9 @@ public:
   uint64_t time_func(unsigned count, bool nonnormals, std::mt19937 &gen,
 		     const param_type &min, const param_type &max, double &sum,
 		     param_type *ret);
+  double call(const param_type &val){ return func->call(val);}
 };
+std::ostream &operator<<(std::ostream &os, const timeable::param_type &w);
 
 /* ---------------- */
 class parameters:public std::vector<timeable::param_type *>{
@@ -106,8 +108,9 @@ public:
   parameters(){}
   parameters(unsigned params, const char *filename, bool nonnormals);
   bool push_back(timeable::param_type *newone);
+  bool push_back(double x);
+  bool push_back(double x, double y);
 };
-
 std::ostream &operator<<(std::ostream &os, const parameters &w);
 
 /* This really can only apply to single dimension functions. The

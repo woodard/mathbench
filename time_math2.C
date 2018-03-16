@@ -76,8 +76,8 @@ int main(int argc, char **argv)
   const char *funcname="exp";
   const char *altfname=NULL;
   const char *libmname="libm.so";
-  // Governing parameters and defaults
-  runtime_params params;
+  
+  runtime_params params; // Governing parameters and defaults
 
   bool dumpnums=false;
   const char *min_str=NULL;

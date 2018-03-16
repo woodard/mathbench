@@ -1,7 +1,5 @@
 #include <stdlib.h>
-#include <math.h>
 #include <getopt.h>
-#include <dlfcn.h>
 
 #include <vector>
 #include <utility>
@@ -14,7 +12,15 @@
 
 bool verbose=false;
 bool nonnormals=false;
-double (*func)(double)=&exp;
+
+bool close_enough(bool oneulp, double r1, double r2){
+  if(r1==r2) return true;
+  if(!oneulp) return false;
+  double r1_plus=std::nexttoward(r1, std::numeric_limits<double>::max());
+  double r1_minus=std::nexttoward(r1, -std::numeric_limits<double>::max());
+  if(r1_plus==r2 || r1_minus==r2) return true;
+  return false;
+}
 
 int main(int argc, char **argv){
   int c=0;
@@ -35,7 +41,10 @@ int main(int argc, char **argv){
     {0,                0,                 0,  0 }
   };
   const char *funcname="exp";
-  const char *altfuncname=NULL;
+  const char *altfname=NULL;
+  const char *libmname="libm.so";
+  const char *altlibmname=NULL;
+    
   unsigned cases=20000;
   bool targeted=false;
   bool dumpnums=false;
@@ -51,7 +60,7 @@ int main(int argc, char **argv){
       oneulp=true;
       break;
     case 'a':
-      altfuncname=optarg;
+      altfname=optarg;
       break;
     case 'c':
       sscanf(optarg,"%ld",&cases);
@@ -60,7 +69,6 @@ int main(int argc, char **argv){
       dumpnums=true;
       break;
     case 'f':
-      func=getFunc(optarg);
       funcname=optarg;
       break;
     case 'n':
@@ -77,25 +85,13 @@ int main(int argc, char **argv){
     }
   }
 
-  std::vector< double> numbers;
-  read_numbers(argv[optind],nonnormals,numbers);
-
-  void *altlibm=dlmopen(LM_ID_NEWLM, argv[optind+1], RTLD_LAZY);
-  if( altlibm==NULL){
-    std::cerr << "Loading of alternative libm implementation failed: "
-	      << dlerror() << std::endl;
-    exit(3);
-  }
-
-  if(altfuncname==NULL)
-    altfuncname=funcname;
-  double (*altfunc)(double)=
-    reinterpret_cast<double (*)(double)>(dlsym(altlibm,altfuncname));
-  
-  if( altfunc==NULL)
-    exit(4);
+  timeable func1(libmname, funcname, NULL);
+  timeable func2(altlibmname, funcname, altfname);
+  parameters numbers(func1.num_params(), argv[optind], nonnormals);
 
   if(targeted){
+    if( func1.num_params()==2)
+      exit(2);
     std::vector<srch_rng> srng;
     make_srngs( numbers, srng, cases, verbose);
 
@@ -107,9 +103,9 @@ int main(int argc, char **argv){
       unsigned tested;
       double worst;
       res( srch_rng &r, unsigned b, unsigned t, double w):
-	rng(r),bad(b),tested(t),worst(w){}
+ 	rng(r),bad(b),tested(t),worst(w){}
       res( const res &o):
-	rng(o.rng),bad(o.bad),tested(o.tested),worst(o.worst){}
+ 	rng(o.rng),bad(o.bad),tested(o.tested),worst(o.worst){}
     };
     std::vector< res > results;
  #pragma omp parallel for
@@ -119,69 +115,57 @@ int main(int argc, char **argv){
       double worst=0.0;
       double cur=srng[i].begin();
       do{
-	tested++;
-	double r1=func(cur);
-	double r2=altfunc(cur);
-	if(r1!=r2){
-	  double r1_plus=std::nexttoward(r1,
-					 std::numeric_limits<double>::max());
-	  double r1_minus=std::nexttoward(r1,
-					  -std::numeric_limits<double>::max());
-	  if(oneulp && (r1_plus==r2 || r1_minus==r2)){
-	    if(verbose)
-	      std::cout << funcname << '(' << std::hexfloat << cur << ") = "
-			<< r1 << ", "	<< r2 << " difference: "
-			<< abs(r1-r2) << " is " << (r1_plus==r2?'+':'-')
-			<< "1 ULP" << std::endl;
-	  } else {
-	    bad_ones++;
-	    worst=std::max(worst, abs(r1-r2));
-	    if(dumpnums){
-	      pthread_mutex_lock(&m);
-	      if(std::find(numbers.begin(),numbers.end(),cur)==numbers.end())
-		numbers.push_back(cur);
-	      pthread_mutex_unlock(&m);
-	    }
-	  }
-	}
-	cur=std::nexttoward(cur, std::numeric_limits<double>::max());
+ 	tested++;
+ 	timeable::dbl_param cur_val(cur);
+ 	double r1=func1.call(cur_val);
+ 	double r2=func2.call(cur_val);
+ 	bool close=close_enough(oneulp,r1,r2);
+ 	if(r1!=r2 && close && verbose)
+ 	  std::cout << funcname << '(' << std::hexfloat << cur << ") = "
+ 		    << r1 << ", "	<< r2 << " difference: "
+ 		    << abs(r1-r2) << " is " << (r1>r2?'+':'-')
+ 		    << "1 ULP" << std::endl;
+ 	if(!close){
+ 	  bad_ones++;
+ 	  worst=std::max(worst, abs(r1-r2));
+ 	  if(dumpnums){
+ 	    pthread_mutex_lock(&m);
+ 	    numbers.push_back(cur);
+ 	    pthread_mutex_unlock(&m);
+ 	  }
+ 	}
+ 	cur=std::nexttoward(cur, std::numeric_limits<double>::max());
       } while(cur<srng[i].end());
       if( bad_ones){
-	pthread_mutex_lock(&m);
-	results.push_back( res(srng[i], bad_ones, tested, worst));
-	pthread_mutex_unlock(&m);
+      	pthread_mutex_lock(&m);
+      	results.push_back( res(srng[i], bad_ones, tested, worst));
+      	pthread_mutex_unlock(&m);
       }
     }
     for( auto cur=results.begin();cur!=results.end();cur++){
       std::cout << "Between: " << std::hexfloat	<< cur->rng.begin()
-		<< " - " << cur->rng.end() << '\t' << cur->bad
-		<< " bad values\tmax error: "
-		<< cur->worst << std::endl;
+    		<< " - " << cur->rng.end() << '\t' << cur->bad
+    		<< " bad values\tmax error: "
+    		<< cur->worst << std::endl;
     }
     std::cout << "-------" << std::endl;
-  }
+  } // end of targeted mode
 
   unsigned int bad_ones=0;
-  std:: cout << funcname << "(x) = glibc, " << argv[optind+1] << std::endl;
+  std::cout << funcname << "(x) = glibc, " << argv[optind+1] << std::endl;
   for( unsigned int i=0;i<numbers.size();i++){
-    double r1=func(numbers[i]);
-    double r2=altfunc(numbers[i]);
-    if(r1!=r2){
-      double r1_plus=std::nexttoward(r1, std::numeric_limits<double>::max());
-      double r1_minus=std::nexttoward(r1, -std::numeric_limits<double>::max());
-      if(!oneulp || !(r1_plus==r2 || r1_minus==r2)){
-	bad_ones++;
-	std::cout << funcname << '(' << std::hexfloat
-		  << numbers[i] << ") = " << r1 << ", "	<< r2 << " difference: "
-		  << abs(r1-r2) << std::endl;
-      }
+    double r1=func1.call(*numbers[i]);
+    double r2=func2.call(*numbers[i]);
+    if(!close_enough(oneulp, r1, r2)){
+      bad_ones++;
+      std::cout << funcname << '(' << std::hexfloat
+		<< *numbers[i] << ") = " << r1 << ", "	<< r2 << " difference: "
+		<< abs(r1-r2) << std::endl;
     }
   }
   std::cout << bad_ones << '/' << numbers.size() << " failed" << std::endl;
-  if(dumpnums){
-    std::cout << "---------" << std::endl << std::hexfloat;
-    for( auto num=numbers.begin(); num!=numbers.end();num++)
-      std::cout << *num << std::endl;
-  }
+  if(dumpnums)
+    std::cout << "---------" << std::endl << numbers << std::endl;
+
   exit(0);
 }

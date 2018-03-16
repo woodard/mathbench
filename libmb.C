@@ -49,6 +49,22 @@ bool parameters::push_back(timeable::param_type *newone){
   return true;
 }
 
+bool parameters::push_back(double x){
+  timeable::param_type *newone=new timeable::dbl_param(x);
+  bool retval=push_back(newone);
+  if(!retval)
+    delete newone;
+  return retval;
+}
+
+bool parameters::push_back(double x,double y){
+  timeable::param_type *newone=new timeable::twodbl_param(x,y);
+  bool retval=push_back(newone);
+  if(!retval)
+    delete newone;
+  return retval;
+}
+
 void make_srngs(const parameters &nums, std::vector<srch_rng> &srng,
 		 unsigned cases, bool verbose){
   for( auto num=nums.begin();num!=nums.end();num++){
