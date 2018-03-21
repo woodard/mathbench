@@ -22,31 +22,32 @@ parameters::parameters(unsigned params, const char *filename, bool nonnormals){
   while (std::getline(infile, line)){
     if(line[0]=='#')
       continue;
-    timeable::param_type *newone;
-    if(params==1)
-      newone=new timeable::dbl_param(line);
-    else
-      newone=new timeable::twodbl_param(line);
+    timeable::param_type *newone=(params==1)?
+      dynamic_cast< timeable::param_type *>(new timeable::dbl_param(line)):
+      dynamic_cast< timeable::param_type *>(new timeable::twodbl_param(line));
     if(nonnormals==false && !newone->isnormal()){
       std::cout << "Discarding nonnormal: " << line << std::endl;
       delete newone;
       continue;
     }
-    if(push_back(newone)){
+    // add to the list if not a duplicate.
+    if(!push_back(newone)){ 
       std::cout << "Discarding duplicate: " << line << std::endl;
       delete newone;
     }
-    std::vector<timeable::param_type *>::push_back(newone);
   }
 }
 
 bool parameters::push_back(timeable::param_type *newone){
-  if(std::find_if(begin(), end(),
-		  [newone](const timeable::param_type *s){ return *s==*newone;})
-     != end())
-    return false;
-  std::vector<timeable::param_type *>::push_back(newone);
-  return true;
+  /* don't insert duplicates so not finding a match i.e. find_if(...)==end()
+     is the only time we should insert into the list */
+  bool retval=std::find_if(begin(), end(),
+			   [newone](const timeable::param_type *s){
+			     return *s==*newone;}
+			   )==end();
+  if(retval)
+    std::vector<timeable::param_type *>::push_back(newone);
+  return retval;
 }
 
 bool parameters::push_back(double x){
@@ -108,36 +109,54 @@ static inline void Gettimeofday(struct timeval &ts){
 }
 
 timeable::timeable(const char *libmname, const char *funcname,
-		  const char *altname){
-  void *libm=dlmopen(LM_ID_NEWLM,libmname , RTLD_LAZY);
-  void *raw_func;
-  if(libm==NULL){
+			       const char *altname){
+  try{
+    void *libm=dlmopen(LM_ID_NEWLM,libmname , RTLD_LAZY);
+    if(libm==NULL)
+      if(std::string(libmname)=="libm.so"){
+	libmname="libm.so.6";
+	libm=dlmopen(LM_ID_NEWLM,libmname , RTLD_LAZY);
+	if(libm==NULL)
+	  throw BAD_LIBM();
+      }
+    void *raw_func;
+    raw_func=dlsym(libm, altname!=NULL?altname:funcname);
+    if(raw_func==NULL)
+      throw BAD_FNAME();
+
+    std::string fn(funcname);
+    if( fn=="tan"   || fn=="cos"  || fn=="sin"   || fn=="acosh" || fn=="acos" ||
+	fn=="asinh" || fn=="asin" || fn=="atanh" || fn=="cosh"  || fn=="exp2" ||
+	fn=="log2"  || fn=="log"  || fn=="rint"  || fn=="sinh"  || fn=="sqrt" ||
+	fn=="tanh"  || fn=="trunc"|| fn=="exp" ){
+      params=1;
+      func=new single_func(raw_func);
+    } else if( fn=="pow"){
+      params=2;
+      func=new twoparam_func(raw_func);
+    } else
+      throw BAD_FUNC();
+  }
+  catch(BAD_LIBM &){
     std::cerr << "Loading of libm implementation failed: " << dlerror()
 	      << std::endl;
-    throw BAD_LIBM;
+    exit(1);
   }
-  if(altname==NULL)
-    raw_func=dlsym(libm,funcname);
-  else
-    raw_func=dlsym(libm,altname);
-  if(raw_func==NULL){
-    std::cerr << "Could not locate the function " << funcname << ' '
+  catch(BAD_FNAME &){
+    std::cerr << "Could not locate the function "
+	      << (altname!=NULL?altname:funcname) << ' '
 	      << dlerror() << std::endl;
-    throw BAD_FNAME;
+    exit(1);
   }
-  std::string fn(funcname);
-  if( fn=="tan"   || fn=="cos"  || fn=="sin"   || fn=="acosh" || fn=="acos" ||
-      fn=="asinh" || fn=="asin" || fn=="atanh" || fn=="cosh"  || fn=="exp2" ||
-      fn=="log2"  || fn=="log"  || fn=="rint"  || fn=="sinh"  || fn=="sqrt" ||
-      fn=="tanh"  || fn=="trunc"){
-    params=1;
-    func=new single_func(raw_func);
-  } else if( fn=="pow"){
-    params=2;
-    func=new twoparam_func(raw_func);
-  } else
-    throw BAD_FUNC;
+  catch(BAD_FUNC &){
+    std::cerr << "Unknown function " << (altname!=NULL?altname:funcname)
+	      << std::endl;
+    exit(1);
+  }
 }
+
+
+
 
 uint64_t timeable::time_func(unsigned count, bool nonnormals, std::mt19937 &gen,
 			    const param_type &min, const param_type &max,
@@ -188,6 +207,7 @@ std::ostream &operator<<(std::ostream &os, const timeable::param_type &w){
 
 std::ostream &operator<<(std::ostream &os, const parameters &w){
   std::cout << "---------" << std::endl << std::hexfloat;
-  for( auto num=w.begin(); num!=w.end();num++)
-    std::cout << *num << std::endl; 
+  std::for_each(w.begin(),w.end(),
+		[](auto &num){std::cout << num << std::endl;});
+
 }

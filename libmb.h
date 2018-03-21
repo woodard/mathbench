@@ -90,7 +90,9 @@ private:
   func_type *func;
   unsigned params;
 public:
-  enum errors{ BAD_LIBM, BAD_FNAME, BAD_FUNC};
+  class BAD_LIBM {};
+  class BAD_FNAME{};
+  class BAD_FUNC{};
 
   timeable(const char *libmname, const char *funcname, const char *altname);
   unsigned num_params(){return params;}

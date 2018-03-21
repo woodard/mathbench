@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <getopt.h>
+#include <dlfcn.h>
 
 #include <iostream>
 #include <utility>
@@ -287,12 +288,13 @@ void targeted_walk(timeable &function, ranges &rng, parameters &numbers,
 /* ------------------------------- */
 
 std::ostream &operator<<(std::ostream &os, const ranges &r){
-  std::cout << std::endl << r.size() << " R: " << std::endl;
-  for( auto it=r.begin();it!=r.end();it++)
-    std::cout << it->begin << '-' << it->end << " c:" << it->count << "\tm:"
-              << it->sum/it->count << " \tr:" << it->min
-              << ':' << it->max << ' '
-              << std::endl;
+  std::cout << std::endl << r.size() << " Ranges: " << std::endl;
+  std::for_each(r.begin(),r.end(),
+		[](auto &it){
+		  std::cout << it.begin << '-' << it.end << " c:"
+			    << it.count << "\tm:" << it.sum/it.count
+			    << " \tr:" << it.min << ':' << it.max << ' '
+			    << std::endl;});
 }
 
 unsigned ranges::range_sort(result_t &results, parameters &numbers,
@@ -361,13 +363,9 @@ void ranges::setup_ranges(timeable &tm, parameters &numbers,
     }
   }
   std::vector<range>::push_back(range(begin,results.size()-1,count,sum));
-
-  for( auto it=std::vector<range>::begin();it!=std::vector<range>::end();it++){
-    it->min=results[it->begin].second;
-    it->max=results[it->end].second;
-  }
-  std::cout << std::endl << std::vector<range>::size() << " Ranges: "
-	    << std::endl << *this << std::endl;
+  std::for_each(std::vector<range>::begin(),std::vector<range>::end(),
+		[results](auto &it){
+		  it.min=results[it.begin].second;
+		  it.max=results[it.end].second;});
   clear_counts();
 }
-
