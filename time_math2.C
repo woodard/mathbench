@@ -43,10 +43,10 @@ public:
   class result_t:public std::vector<aresult>{
   public:
     void free(){
-      std::for_each(begin(),end(), [](aresult &e){ delete e.first;} );
+      /* This class doesn't actually own the objects that are stored in its
+	 vector they are just pointers back to the numbers vectors and so we
+	 don't need to free the objects pointed to in its vector. */
       std::vector<aresult>::clear(); }
-    ~result_t(){ free();}
-	
     void push_back(timeable::param_type *p, uint64_t time){
       aresult a;
       a.first=p;
@@ -282,6 +282,7 @@ void targeted_walk(timeable &function, ranges &rng, parameters &numbers,
       std::cout << rng;
       pthread_mutex_lock(&mutex);
     }
+    results.free();
   }
 }
 
@@ -330,7 +331,7 @@ void ranges::setup_ranges(timeable &tm, parameters &numbers,
 
 #pragma omp parallel for
   for( int i=0;i<numbers.size();i++){
-    timeable::param_type *b=numbers[i]->clone();
+    timeable::param_type *b=numbers[i];
     double sum;
     uint64_t time=tm.time_func(params.iterations, *b, sum);
 

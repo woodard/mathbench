@@ -155,9 +155,6 @@ timeable::timeable(const char *libmname, const char *funcname,
   }
 }
 
-
-
-
 uint64_t timeable::time_func(unsigned count, bool nonnormals, std::mt19937 &gen,
 			    const param_type &min, const param_type &max,
 			    double &sum, param_type *ret){

@@ -44,7 +44,7 @@ int main(int argc, char **argv){
   const char *altfname=NULL;
   const char *libmname="libm.so";
   const char *altlibmname=NULL;
-    
+
   unsigned cases=20000;
   bool targeted=false;
   bool dumpnums=false;
