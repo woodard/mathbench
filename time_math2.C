@@ -9,7 +9,9 @@
 #include <algorithm>
 #include <random>
 
-#include "libmb.h"
+#include "timeable.h"
+#include "ranges.h"
+#include "parameters.h"
 
 class runtime_params{
 public:
@@ -24,51 +26,10 @@ public:
 		   samplerate(1000),nonnormals(false),verbose(false){}
 };
 
-class range{
-public:
-  unsigned begin;
-  unsigned end;
-  unsigned count;
-  unsigned sum;
-  uint64_t min,max;
-
-  range(){}
-  range(unsigned b, unsigned e, unsigned c, unsigned s):
-    begin(b),end(e),count(c),sum(s){}
-};
-
-class ranges:public std::vector<range>{
-public:  
-  typedef std::pair<timeable::param_type *, uint64_t> aresult;
-  class result_t:public std::vector<aresult>{
-  public:
-    void free(){
-      /* This class doesn't actually own the objects that are stored in its
-	 vector they are just pointers back to the numbers vectors and so we
-	 don't need to free the objects pointed to in its vector. */
-      std::vector<aresult>::clear(); }
-    void push_back(timeable::param_type *p, uint64_t time){
-      aresult a;
-      a.first=p;
-      a.second=time;
-      std::vector<aresult>::push_back(a);}
-  };
-  
-  ranges(timeable &tm, parameters &numbers, runtime_params &params){
-    setup_ranges(tm,numbers, params); }
-  void setup_ranges(timeable &tm, parameters &numbers, runtime_params &params);
-  unsigned range_sort(result_t &results, parameters &numbers,
-		      unsigned samplerate);
-  void clear_counts(){
-    std::for_each(begin(),end(),[](range &e){e.count=0;});}
-
-  friend std::ostream &operator<<(std::ostream &os, const ranges &r);
-};
-
 static void random_spray(timeable &function, ranges &rng,
-			 runtime_params &params, parameters &numbers,
-			 timeable::param_type &min, timeable::param_type &max);
-static void targeted_walk(timeable &function, ranges &rng, parameters &nums,
+			 runtime_params &params, parameters_t &numbers,
+			 param_t &min, param_t &max);
+static void targeted_walk(timeable &function, ranges &rng, parameters_t &nums,
 			  runtime_params &params);
 
 /* --- Beginning of main --- */
@@ -163,28 +124,30 @@ int main(int argc, char **argv)
   }
 
   timeable function(libmname, funcname, altfname);
-  parameters numbers(function.num_params(), argv[optind], params.nonnormals);
-  ranges rng(function, numbers, params);
+  parameters_t numbers(function.num_params(), argv[optind], params.nonnormals);
+  parameters_t dumpees;
+  ranges rng(function, numbers, params.iterations);
+  std::cout << rng << std::endl;
 
   if(randspray){
-    timeable::param_type *min_val;
-    timeable::param_type *max_val;
+    param_t *min_val;
+    param_t *max_val;
     if(function.num_params()==1){
       min_val=(min_str==NULL)?
-	new timeable::dbl_param(-std::numeric_limits<double>::max()):
-	new timeable::dbl_param(min_str);
+	new dbl_param_t(-std::numeric_limits<double>::max()):
+	new dbl_param_t(min_str);
       max_val=(max_str==NULL)?
-	new timeable::dbl_param(std::numeric_limits<double>::max()):
-	new timeable::dbl_param(max_str);
+	new dbl_param_t(std::numeric_limits<double>::max()):
+	new dbl_param_t(max_str);
     }else{
       min_val=(min_str==NULL)?
-	new timeable::twodbl_param(-std::numeric_limits<double>::max(),
+	new twodbl_param_t(-std::numeric_limits<double>::max(),
 				   -std::numeric_limits<double>::max()):
-	new timeable::twodbl_param(min_str);
+	new twodbl_param_t(min_str);
       max_val=(max_str==NULL)?
-	new timeable::twodbl_param(std::numeric_limits<double>::max(),
+	new twodbl_param_t(std::numeric_limits<double>::max(),
 				   std::numeric_limits<double>::max()):
-	new timeable::twodbl_param(max_str);
+	new twodbl_param_t(max_str);
     }
 	
     random_spray(function, rng, params, numbers, *min_val, *max_val);
@@ -194,38 +157,40 @@ int main(int argc, char **argv)
       targeted_walk(function, rng, numbers, params);
     else
       abort();
-  if(targeted || randspray)
-    // print the ranges one last time.
-    rng.setup_ranges(function, numbers, params); 
+  // print the ranges one last time.
+  if(targeted || randspray){
+    rng.setup_ranges(function, numbers, params.iterations);
+    std::cout << rng << std::endl;
+  }
   if(dumpnums) std::cout << numbers << std::endl;
   exit(0);
 }
 
 void random_spray(timeable &function, ranges &rng, runtime_params &params,
-		  parameters &numbers, timeable::param_type &min,
-		  timeable::param_type &max){
-  pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+		  parameters_t &numbers, param_t &min,
+		  param_t &max){
   std::random_device rd;  
   std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
-  ranges::result_t results;
   
-  for( int j=0;j<params.num_sets;j++){
 #pragma omp parallel for
+  for( int j=0;j<params.num_sets;j++){
+    timeable::results_t results;
+    std::cout << "Set " << j << '/' << params.num_sets << std::endl;
     for( unsigned i=0;i<params.cases;i++){
-      timeable::param_type *p;
+      param_t *p;
       double sum;
       uint64_t time=function.time_func(params.iterations, params.nonnormals,
 				       gen, min, max, sum, p);
-      pthread_mutex_lock(&mutex);
       results.push_back( p,time); 
-      pthread_mutex_unlock(&mutex);
     }
 
-    unsigned dumped=rng.range_sort(results, numbers, params.samplerate);
+    parameters_t dumpees;
+    unsigned dumped=rng.range_sort(results, dumpees);
     if( dumped*100/results.size()>20){
       std::cout << "Dumped: " << dumped << '/' << results.size()
 		<< " Resampling ranges" << std::endl;
-      rng.setup_ranges(function,numbers, params);
+      numbers.push_back(dumpees, params.samplerate);
+      rng.setup_ranges(function,numbers,params.iterations);
     }
     results.free();
     
@@ -235,7 +200,7 @@ void random_spray(timeable &function, ranges &rng, runtime_params &params,
 }
 
 /* This really only makes sense for single parameter functions */
-void targeted_walk(timeable &function, ranges &rng, parameters &numbers,
+void targeted_walk(timeable &function, ranges &rng, parameters_t &numbers,
 		   runtime_params &params){
   std::vector<srch_rng> srng;
   make_srngs( numbers, srng, params.cases, params.verbose);
@@ -245,21 +210,22 @@ void targeted_walk(timeable &function, ranges &rng, parameters &numbers,
   unsigned done=0;
 #pragma omp parallel for
   for(unsigned int i=0;i<srng.size();i++){
-    ranges::result_t results;
+    timeable::results_t results;
     double sum;
     double cur=srng[i].begin();
-    timeable::dbl_param cur_param(cur);
+    dbl_param_t cur_param(cur);
     do{
       uint64_t t=function.time_func(params.iterations,cur_param, sum);
-      results.push_back(new timeable::dbl_param(cur), t);
+      results.push_back(new dbl_param_t(cur), t);
       cur=std::nexttoward(cur, std::numeric_limits<double>::max());
     } while(cur<srng[i].end());
 
+    parameters_t dumpees;
     bool flag;
     do{
       flag=true;
       pthread_mutex_lock(&mutex);
-      unsigned dumped=rng.range_sort(results, numbers, params.samplerate);
+      unsigned dumped=rng.range_sort(results, dumpees);
       pthread_mutex_unlock(&mutex);
       
       if( dumped*100/results.size()>20){ //20% is an arbitrary
@@ -267,7 +233,8 @@ void targeted_walk(timeable &function, ranges &rng, parameters &numbers,
 	std::cout << "Dumped: " << dumped << '/' << results.size()
 		  << " Resampling ranges" << std::endl;
 	pthread_mutex_lock(&mutex);
-	rng.setup_ranges(function, numbers, params);
+	numbers.push_back(dumpees,params.samplerate);
+	rng.setup_ranges(function, numbers, params.iterations);
 	pthread_mutex_unlock(&mutex);
       }
     }while(flag==false);
@@ -284,89 +251,4 @@ void targeted_walk(timeable &function, ranges &rng, parameters &numbers,
     }
     results.free();
   }
-}
-
-/* ------------------------------- */
-
-std::ostream &operator<<(std::ostream &os, const ranges &r){
-  std::cout << std::endl << r.size() << " Ranges: " << std::endl;
-  std::for_each(r.begin(),r.end(),
-		[](auto &it){
-		  std::cout << it.begin << '-' << it.end << " c:"
-			    << it.count << "\tm:" << it.sum/it.count
-			    << " \tr:" << it.min << ':' << it.max << ' '
-			    << std::endl;});
-}
-
-unsigned ranges::range_sort(result_t &results, parameters &numbers,
-			    unsigned samplerate){
-  unsigned dumped=0;
-
-  for( auto it=results.begin();it!=results.end();it++){
-    if(it->second==0)
-      continue;
-    bool flag=0;
-    for( auto range=begin();range!=end();range++){
-      if(it->second>=range->min && it->second<=range->max){
-	range->count++;
-	flag=true;
-	break;
-      }
-    }
-    if(!flag){ // didn't fit into a range
-      dumped++;
-      if( dumped%samplerate==0){
-	numbers.push_back(it->first->clone());
-	it->second=0; // this number already was added
-      }
-    }
-  }  
-  return dumped;
-}
-
-void ranges::setup_ranges(timeable &tm, parameters &numbers,
-			  runtime_params &params){
-  result_t results;
-  pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-
-#pragma omp parallel for
-  for( int i=0;i<numbers.size();i++){
-    timeable::param_type *b=numbers[i];
-    double sum;
-    uint64_t time=tm.time_func(params.iterations, *b, sum);
-
-    pthread_mutex_lock(&mutex);
-    results.push_back(b,time);
-    pthread_mutex_unlock(&mutex);
-  }
-
-  // end parallel region
-  std::sort(results.begin(), results.end(),
-            [](auto &left, auto &right) { return left.second < right.second; }
-            );
-
-  unsigned count=1;
-  unsigned sum=results[0].second,begin=0;
-  for( unsigned i=1;i<results.size()-1;i++){ // intentionally starts at 1
-    auto lowgap=results[i].second-results[i-1].second;
-    auto highgap=results[i+1].second-results[i].second;
-    auto partmean=sum/count/20; // 20=5% which is arbitrary but works
-    if( (lowgap<=highgap && highgap<partmean) || lowgap<=partmean ) { 
-      count++;
-      sum+=results[i].second;
-    } else { // closer to next value
-      if(count>2)
-        //if it is this small it probably isn't a plateau it is a transition
-        std::vector<range>::push_back(range(begin,i-1,count,sum));
-      begin=i;
-      count=1;
-      sum=results[i].second;
-    }
-  }
-  std::vector<range>::push_back(range(begin,results.size()-1,count,sum));
-  std::for_each(std::vector<range>::begin(),std::vector<range>::end(),
-		[results](auto &it){
-		  it.min=results[it.begin].second;
-		  it.max=results[it.end].second;});
-  clear_counts();
 }

@@ -8,7 +8,7 @@
 #include <limits>
 #include <algorithm>
 
-#include "libmb.h"
+#include "timeable.h"
 
 bool verbose=false;
 bool nonnormals=false;
@@ -87,7 +87,7 @@ int main(int argc, char **argv){
 
   timeable func1(libmname, funcname, NULL);
   timeable func2(altlibmname, funcname, altfname);
-  parameters numbers(func1.num_params(), argv[optind], nonnormals);
+  parameters_t numbers(func1.num_params(), argv[optind], nonnormals);
 
   if(targeted){
     if( func1.num_params()==2)
