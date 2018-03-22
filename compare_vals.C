@@ -8,6 +8,7 @@
 #include <limits>
 #include <algorithm>
 
+#include "parameters.h"
 #include "timeable.h"
 
 bool verbose=false;
@@ -116,7 +117,7 @@ int main(int argc, char **argv){
       double cur=srng[i].begin();
       do{
  	tested++;
- 	timeable::dbl_param cur_val(cur);
+ 	dbl_param_t cur_val(cur);
  	double r1=func1.call(cur_val);
  	double r2=func2.call(cur_val);
  	bool close=close_enough(oneulp,r1,r2);

@@ -65,7 +65,6 @@ std::ostream &operator<<(std::ostream &os, const param_t &w);
 
 /* ---------------- */
 
-
 /* This really can only apply to single dimension functions. The
    operations for things like areas are not quite as simple as they
    are for line segments and the concepts don't really make sense. */

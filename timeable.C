@@ -48,7 +48,7 @@ srch_rng::srch_rng(dbl_param_t &num, unsigned cases):b(num),e(num){
   }
 }
 
-/* make this go away and use PAPI or Caliper or something */
+/* TODO make this go away and use PAPI or Caliper or something */
 static inline void Gettimeofday(struct timeval &ts){
   if (gettimeofday (&ts, NULL) != 0) {
     fprintf (stderr, "Unable to get time of day, exiting\n");
