@@ -4,30 +4,25 @@
 
 unsigned ranges::range_sort(const timeable::results_t &results,
 			    parameters_t &dumpees){
-  unsigned dumped=0;
+  dumpees.clear();
   std::for_each(results.begin(),results.end(),
-		[this,dumped,dumpees](auto &result){
+		[this,dumpees](auto &result) mutable {
       auto arange=std::find_if(begin(),end(),[result](auto &range){
 	  return result.second>=range.min && result.second<=range.max;});
-      if(arange!=end())
-	arange->count++;
-      else{
-	// didn't fit into a range
-	dumped++;
-	dumpees.push_back(result.first);
-      }
+      if(arange!=end())	arange->count++;
+      else dumpees.push_back(result.first);
     });
-  return dumped;
+  return dumpees.size();
 }
 
-void ranges::setup_ranges(timeable &tm, parameters &numbers,
+void ranges::setup_ranges(timeable &tm, parameters_t &numbers,
                          unsigned iterations){
-  result_t results;
+  timeable::results_t results;
   pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 #pragma omp parallel for
   for( int i=0;i<numbers.size();i++){
-    timeable::param_type *b=numbers[i];
+    param_t *b=numbers[i];
     double sum;
     uint64_t time=tm.time_func(iterations, *b, sum);
 
@@ -53,14 +48,14 @@ void ranges::setup_ranges(timeable &tm, parameters &numbers,
     } else { // closer to next value
       if(count>2)
         //if it is this small it probably isn't a plateau it is a transition
-        std::vector<range>::push_back(range(begin,i-1,count,sum));
+        std::vector<range_t>::push_back(range_t(begin,i-1,count,sum));
       begin=i;
       count=1;
       sum=results[i].second;
     }
   }
-  std::vector<range>::push_back(range(begin,results.size()-1,count,sum));
-  std::for_each(std::vector<range>::begin(),std::vector<range>::end(),
+  std::vector<range_t>::push_back(range_t(begin,results.size()-1,count,sum));
+  std::for_each(std::vector<range_t>::begin(),std::vector<range_t>::end(),
                [results](auto &it){
                  it.min=results[it.begin].second;
                  it.max=results[it.end].second;});

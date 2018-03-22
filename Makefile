@@ -8,12 +8,12 @@ time_math2: time_math2.o timeable.o ranges.o parameters.o
 	g++ $(CXXFLAGS) time_math2.o timeable.o ranges.o parameters.o \
 	  -o time_math2 $(LDFLAGS)
 
-compare_vals: compare_vals.o timeable.o
-	g++ $(CXXFLAGS) compare_vals.o timeable.o -o compare_vals $(LDFLAGS)
+compare_vals: compare_vals.o parameters.o
+	g++ $(CXXFLAGS) compare_vals.o parameters.o -o compare_vals $(LDFLAGS)
 
 time_math2.o: time_math2.C timeable.h parameters.h ranges.h
 
-compare_vals.o: compare_vals.C timeable.h
+compare_vals.o: compare_vals.C parameters.h
 
 timeable.o: timeable.C timeable.h parameters.h
 
