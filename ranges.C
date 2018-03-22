@@ -17,6 +17,7 @@ unsigned ranges::range_sort(const timeable::results_t &results,
 
 void ranges::setup_ranges(timeable &tm, parameters_t &numbers,
                          unsigned iterations){
+  clear();
   timeable::results_t results;
   pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -37,7 +38,7 @@ void ranges::setup_ranges(timeable &tm, parameters_t &numbers,
             );
 
   unsigned count=1;
-  unsigned sum=results[0].second,begin=0;
+  unsigned sum=results[0].second,beg=0;
   for( unsigned i=1;i<results.size()-1;i++){ // intentionally starts at 1
     auto lowgap=results[i].second-results[i-1].second;
     auto highgap=results[i+1].second-results[i].second;
@@ -48,14 +49,14 @@ void ranges::setup_ranges(timeable &tm, parameters_t &numbers,
     } else { // closer to next value
       if(count>2)
         //if it is this small it probably isn't a plateau it is a transition
-        std::vector<range_t>::push_back(range_t(begin,i-1,count,sum));
-      begin=i;
+        push_back(range_t(beg,i-1,count,sum));
+      beg=i;
       count=1;
       sum=results[i].second;
     }
   }
-  std::vector<range_t>::push_back(range_t(begin,results.size()-1,count,sum));
-  std::for_each(std::vector<range_t>::begin(),std::vector<range_t>::end(),
+  push_back(range_t(beg,results.size()-1,count,sum));
+  std::for_each(begin(),end(),
                [results](auto &it){
                  it.min=results[it.begin].second;
                  it.max=results[it.end].second;});

@@ -171,11 +171,15 @@ void random_spray(timeable &function, ranges &rng, runtime_params &params,
 		  param_t &max){
   std::random_device rd;  
   std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
+  pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
   
-#pragma omp parallel for
+  //#pragma omp parallel for
   for( int j=0;j<params.num_sets;j++){
     timeable::results_t results;
-    std::cout << "Set " << j << '/' << params.num_sets << std::endl;
+    pthread_mutex_lock(&mutex);
+    std::cout << "Set " << j << '/' << params.num_sets << "with: "
+	      << params.cases << std::endl;
+    pthread_mutex_unlock(&mutex);    
     for( unsigned i=0;i<params.cases;i++){
       param_t *p;
       double sum;
@@ -183,19 +187,24 @@ void random_spray(timeable &function, ranges &rng, runtime_params &params,
 				       gen, min, max, sum, p);
       results.push_back( p,time); 
     }
+    pthread_mutex_lock(&mutex);
+    std::cout << "Set " << j << ' ' << results.size() << std::endl;
+    pthread_mutex_unlock(&mutex);
 
     parameters_t dumpees;
     unsigned dumped=rng.range_sort(results, dumpees);
-    if( dumped*100/results.size()>20){
+    if( dumped*100/params.cases>20){
+      pthread_mutex_lock(&mutex);
       std::cout << "Dumped: " << dumped << '/' << results.size()
 		<< " Resampling ranges" << std::endl;
       numbers.push_back(dumpees, params.samplerate);
       rng.setup_ranges(function,numbers,params.iterations);
+      pthread_mutex_unlock(&mutex);
     }
     results.free();
     
     std::cout << "Run: " << j << std::endl << rng;
-    rng.clear_counts();
+    //    rng.clear_counts();
   }
 }
 

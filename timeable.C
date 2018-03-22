@@ -64,9 +64,10 @@ timeable::timeable(const char *libmname, const char *funcname,
       if(std::string(libmname)=="libm.so"){
 	libmname="libm.so.6";
 	libm=dlmopen(LM_ID_NEWLM,libmname , RTLD_LAZY);
-	if(libm==NULL)
-	  throw BAD_LIBM();
       }
+    if(libm==NULL)
+      throw BAD_LIBM();
+
     void *raw_func;
     raw_func=dlsym(libm, altname!=NULL?altname:funcname);
     if(raw_func==NULL)
@@ -86,8 +87,8 @@ timeable::timeable(const char *libmname, const char *funcname,
       throw BAD_FUNC();
   }
   catch(BAD_LIBM &){
-    std::cerr << "Loading of libm implementation failed: " << dlerror()
-	      << std::endl;
+    std::cerr << "Loading of libm implementation failed: " << std::endl
+	      << dlerror() << std::endl;
     exit(1);
   }
   catch(BAD_FNAME &){

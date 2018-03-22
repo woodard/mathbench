@@ -66,7 +66,7 @@ void parameters_t::push_back(const parameters_t &dumpees,
 std::ostream &operator<<(std::ostream &os, const parameters_t &w){
   std::cout << "---------" << std::endl << std::hexfloat;
   std::for_each(w.begin(),w.end(),
-		[](auto &num){std::cout << num << std::endl;});
+		[](auto &num){std::cout << *num << std::endl;});
 
 }
 
