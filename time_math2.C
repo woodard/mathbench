@@ -1,13 +1,13 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <getopt.h>
-#include <dlfcn.h>
 
 #include <iostream>
 #include <utility>
 #include <vector>
 #include <algorithm>
 #include <random>
+#include <string>
 
 #include "timeable.h"
 #include "ranges.h"
@@ -83,10 +83,10 @@ int main(int argc, char **argv)
       altfname=optarg;
       break;
     case 'i':
-      sscanf(optarg,"%ld",&params.iterations);
+      params.iterations=std::stoi(optarg);
       break;
     case 's':
-      sscanf(optarg,"%ld",&params.num_sets);
+      params.num_sets=std::stoi(optarg);
       break;
     case 'm':
       min_str=optarg;
@@ -113,10 +113,10 @@ int main(int argc, char **argv)
       funcname=optarg;
       break;
     case 'c':
-      sscanf(optarg,"%ld",&params.cases);
+      params.cases=std::stoi(optarg);
       break;
     case 'S':
-      sscanf(optarg,"%ld",&params.samplerate);
+      params.samplerate=std::stoi(optarg);
       break;
     default:
       exit(1);
@@ -173,11 +173,11 @@ void random_spray(timeable &function, ranges &rng, runtime_params &params,
   std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
   pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
   
-  //#pragma omp parallel for
+#pragma omp parallel for
   for( int j=0;j<params.num_sets;j++){
     timeable::results_t results;
     pthread_mutex_lock(&mutex);
-    std::cout << "Set " << j << '/' << params.num_sets << "with: "
+    std::cout << "Set " << j << '/' << params.num_sets << " with: "
 	      << params.cases << std::endl;
     pthread_mutex_unlock(&mutex);    
     for( unsigned i=0;i<params.cases;i++){

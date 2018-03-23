@@ -48,7 +48,7 @@ class twodbl_param_t: public param_t{
  twodbl_param_t(double nx, double ny):x(nx),y(ny){}
  twodbl_param_t(const twodbl_param_t &o):x(o.x),y(o.y){}
   twodbl_param_t(std::string &line){
-    if( sscanf(line.c_str(),"%lf %lf",&x,&y) !=2 )
+    if( sscanf(line.c_str(),"%lf, %lf",&x,&y) !=2 )
       throw BAD_CONSTRUCT();}
   twodbl_param_t(const char *str){if( sscanf(str,"%lf:%lf",&x,&y) !=2 )
       throw BAD_CONSTRUCT();} // Notice: a colon rather than a space
@@ -65,6 +65,7 @@ class twodbl_param_t: public param_t{
   
 class parameters_t:public std::vector<param_t *>{
 public:
+  class BAD_NUMFILE{};
   parameters_t(){}
   parameters_t(unsigned params, const char *filename, bool nonnormals);
   bool push_back(param_t *newone);

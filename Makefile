@@ -5,7 +5,7 @@ INTPATH=/usr/tce/packages/intel/intel-18.0.1/lib/intel64_lin/
 all: time_math2 compare_vals
 
 time_math2: time_math2.o timeable.o ranges.o parameters.o
-	g++ $(CXXFLAGS) time_math2.o timeable.o ranges.o parameters.o \
+	g++ $(CXXFLAGS) time_math2.o timeable.o ranges.o parameters.o\
 	  -o time_math2 $(LDFLAGS)
 
 compare_vals: compare_vals.o parameters.o timeable.o

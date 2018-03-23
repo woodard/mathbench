@@ -6,7 +6,8 @@
 
 parameters_t::parameters_t(unsigned params, const char *filename, bool nonnormals){
   std::ifstream infile(filename);
-  // TODO: some error handling here
+  if(!infile)
+    throw BAD_NUMFILE();
   std::string line;
 
   while (std::getline(infile, line)){

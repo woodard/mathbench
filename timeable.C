@@ -110,22 +110,21 @@ uint64_t timeable::time_func(unsigned count, bool nonnormals, std::mt19937 &gen,
   double dmin=min.xval();
   double dmax=max.xval();
   std::uniform_real_distribution<double> dis(dmin,dmax);
-  double x;
-  do{
-    x=dis(gen);
-  }while(nonnormals==true || !std::isnormal(x));
+  double x=dis(gen);
+  if(!nonnormals)
+    while(!std::isnormal(x))
+      x=dis(gen);
 
   if(num_params()==1)
     ret=new dbl_param_t(x);
   else{
     dmin=dynamic_cast<const twodbl_param_t&>(min).yval();    
     dmax=dynamic_cast<const twodbl_param_t&>(max).yval();
-    double y;
     std::uniform_real_distribution<double> dis2(dmin,dmax);
-    do{
-      y=dis2(gen);
-    }while(nonnormals==true || !std::isnormal(y));
-    ret=new twodbl_param_t(x,y);
+    double y=dis2(gen);
+    if(!nonnormals)
+      while(!std::isnormal(y))
+	y=dis2(gen);
   }
   return time_func(count,*ret,sum);
 }
