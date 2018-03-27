@@ -1,15 +1,26 @@
 #include <string>
+#include <iostream>
 #include <fstream>
 #include <algorithm>
 
+#include <ext/stdio_filebuf.h>
+
 #include "parameters.h"
 
-parameters_t::parameters_t(unsigned params, const char *filename, bool nonnormals){
-  std::ifstream infile(filename);
-  if(!infile)
-    throw BAD_NUMFILE();
-  std::string line;
+parameters_t::parameters_t(unsigned params, int argc, char **argv, int optind,
+			   bool nonnormals){
+  std::istream *istr;
+  __gnu_cxx::stdio_filebuf<char> *filebuf;
+  if(optind==argc){
+    filebuf=new __gnu_cxx::stdio_filebuf<char> (0, std::ios::in);
+    istr=new std::istream(filebuf);
+  }else{
+    istr=new std::ifstream(argv[optind]);
+    if(!istr) throw BAD_NUMFILE();
+  }
+  std::istream &infile=*istr;
 
+  std::string line;
   while (std::getline(infile, line)){
     if(line[0]=='#')
       continue;
@@ -27,6 +38,8 @@ parameters_t::parameters_t(unsigned params, const char *filename, bool nonnormal
       delete newone;
     }
   }
+  if(size()==0)
+    throw NO_NUMBERS();
 }
 
 bool parameters_t::push_back(param_t *newone){

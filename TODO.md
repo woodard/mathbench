@@ -18,6 +18,16 @@
 * When doing targeted tests skip numbers that are within each other's
   range because that is essentially doing the same test.
 
+* Add a usage message
+
+* fix the random mode
+
+* add two variable targeted range
+
+* add small rational polynomial mode for pow
+
+* verify that it runs on ARM and Power
+
 ## Documentation
 
 Some documentation would be nice
@@ -31,10 +41,5 @@ Some documentation would be nice
 Feb 9 2018 A mode that randomly picks numbers optionally within a
 range and then calculates the probability that numbers will hit a
 particular performance range.
-Feb 9 2018 Test with crlibm's exp
 Feb 9 2018 do timing based on papi rather than gettimeofday()
-Feb 9 2018 Add support for 2 variable functions like pow(x,y)
 Feb 9 2018 Run on a GPU
-Feb 9 2018 Add a mode that does bitwise comparisons between the
-results from various math library implementations. This may be a
-different program.

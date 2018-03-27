@@ -3,6 +3,7 @@
 CRLIBM=../crlibm/.libs/libcrlibm.so.0.0.0
 NEWGLIBC=../glibc/build/glibc/math/libm.so
 
+./time_math2 < input-decks/exp-inputs || exit 1
 ./time_math2 input-decks/exp-inputs || exit 1
 ./time_math2 -d input-decks/exp-inputs-hard || exit 2
 ./time_math2 -A $CRLIBM -a exp_rn  input-decks/exp-inputs-hard || exit 3

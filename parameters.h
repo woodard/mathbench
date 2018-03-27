@@ -66,13 +66,16 @@ class twodbl_param_t: public param_t{
 class parameters_t:public std::vector<param_t *>{
 public:
   class BAD_NUMFILE{};
+  class NO_NUMBERS{};
   parameters_t(){}
-  parameters_t(unsigned params, const char *filename, bool nonnormals);
+  parameters_t(unsigned params, int argc, char **argv, int optind,
+	       bool nonnormals);
+
   bool push_back(param_t *newone);
   bool push_back(double x);
   bool push_back(double x, double y);
-  /* This assumes that the parameters which are coming in in the dumpee's vector 
-     are owned by someone else. 
+  /* This assumes that the parameters which are coming in in the dumpee's
+     vector are owned by someone else.
      A samplerate of 1 assumes that every value is copied into the list of 
      parameters while a sample rate of 100 means that 1/100 values are added to 
      the list */

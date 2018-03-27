@@ -1,13 +1,16 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <getopt.h>
+#include <dlfcn.h>
 
 #include <iostream>
+#include <fstream>
 #include <utility>
 #include <vector>
 #include <algorithm>
 #include <random>
 #include <string>
+#include <cstring>
 
 #include "timeable.h"
 #include "ranges.h"
@@ -55,8 +58,8 @@ int main(int argc, char **argv)
     {"dumpnumbers",    no_argument,       0, 'd'},
     {"function",       required_argument, 0, 'f'},
     {"iterations",     required_argument, 0, 'i'},
-    {"min",           required_argument, 0, 'm'},
-    {"max",           required_argument, 0, 'M'},
+    {"min",            required_argument, 0, 'm'},
+    {"max",            required_argument, 0, 'M'},
     {"nonnormals",     no_argument,       0, 'n'},
     {"random",         no_argument,       0, 'r'},
     {"sets",           required_argument, 0, 's'},
@@ -123,47 +126,75 @@ int main(int argc, char **argv)
     }
   }
 
-  timeable function(libmname, funcname, altfname);
-  parameters_t numbers(function.num_params(), argv[optind], params.nonnormals);
-  parameters_t dumpees;
-  ranges rng(function, numbers, params.iterations);
-  std::cout << rng << std::endl;
-
-  if(randspray){
-    param_t *min_val;
-    param_t *max_val;
-    if(function.num_params()==1){
-      min_val=(min_str==NULL)?
-	new dbl_param_t(-std::numeric_limits<double>::max()):
-	new dbl_param_t(min_str);
-      max_val=(max_str==NULL)?
-	new dbl_param_t(std::numeric_limits<double>::max()):
-	new dbl_param_t(max_str);
-    }else{
-      min_val=(min_str==NULL)?
-	new twodbl_param_t(-std::numeric_limits<double>::max(),
-				   -std::numeric_limits<double>::max()):
-	new twodbl_param_t(min_str);
-      max_val=(max_str==NULL)?
-	new twodbl_param_t(std::numeric_limits<double>::max(),
-				   std::numeric_limits<double>::max()):
-	new twodbl_param_t(max_str);
-    }
-	
-    random_spray(function, rng, params, numbers, *min_val, *max_val);
-  }
-  if(targeted)
-    if(function.num_params())
-      targeted_walk(function, rng, numbers, params);
-    else
-      abort();
-  // print the ranges one last time.
-  if(targeted || randspray){
-    rng.setup_ranges(function, numbers, params.iterations);
+  try{
+    timeable function(libmname, funcname, altfname);
+    parameters_t numbers(function.num_params(), argc, argv, optind,
+			 params.nonnormals);
+    parameters_t dumpees;
+    ranges rng(function, numbers, params.iterations);
     std::cout << rng << std::endl;
+
+    if(randspray){
+      param_t *min_val;
+      param_t *max_val;
+      if(function.num_params()==1){
+	min_val=(min_str==NULL)?
+	  new dbl_param_t(-std::numeric_limits<double>::max()):
+	  new dbl_param_t(min_str);
+	max_val=(max_str==NULL)?
+	  new dbl_param_t(std::numeric_limits<double>::max()):
+	  new dbl_param_t(max_str);
+      }else{
+	min_val=(min_str==NULL)?
+	  new twodbl_param_t(-std::numeric_limits<double>::max(),
+			     -std::numeric_limits<double>::max()):
+	  new twodbl_param_t(min_str);
+	max_val=(max_str==NULL)?
+	  new twodbl_param_t(std::numeric_limits<double>::max(),
+			     std::numeric_limits<double>::max()):
+	  new twodbl_param_t(max_str);
+      }
+	
+      random_spray(function, rng, params, numbers, *min_val, *max_val);
+    }
+    if(targeted)
+      if(function.num_params())
+	targeted_walk(function, rng, numbers, params);
+      else
+	abort();
+    // print the ranges one last time.
+    if(targeted || randspray){
+      rng.setup_ranges(function, numbers, params.iterations);
+      std::cout << rng << std::endl;
+    }
+    if(dumpnums) std::cout << numbers << std::endl;
+    exit(0);
   }
-  if(dumpnums) std::cout << numbers << std::endl;
-  exit(0);
+  catch(timeable::BAD_LIBM &){
+    std::cerr << "Loading of libm implementation failed: " << std::endl
+	      << dlerror() << std::endl;
+    exit(1);
+  }
+  catch(timeable::BAD_FNAME &){
+    std::cerr << "Could not locate the function "
+	      << (altfname!=NULL?altfname:funcname) << ' '
+	      << dlerror() << std::endl;
+    exit(1);
+  }
+  catch(timeable::BAD_FUNC &){
+    std::cerr << "Unknown function " << (altfname!=NULL?altfname:funcname)
+	      << std::endl;
+    exit(1);
+  }
+  catch(parameters_t::BAD_NUMFILE){
+    std::cerr << "Problem reading test cases from " << argv[optind]
+	      << std::endl << std::strerror(errno) << std::endl;
+    exit(1);
+  }
+  catch(parameters_t::NO_NUMBERS){
+    std::cerr << "No numbers found to make ranges." << std::endl;
+    exit(1);
+  }
 }
 
 void random_spray(timeable &function, ranges &rng, runtime_params &params,

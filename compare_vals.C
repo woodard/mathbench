@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <getopt.h>
+#include <dlfcn.h>
 
 #include <vector>
 #include <utility>
@@ -104,7 +105,7 @@ int main(int argc, char **argv){
   try{
     timeable func1(libmname, funcname, NULL);
     timeable func2(altlibmname, funcname, altfname);
-    parameters_t numbers(func1.num_params(), argv[optind], nonnormals);
+    parameters_t numbers(func1.num_params(), argc, argv, optind, nonnormals);
 
     if(targeted){
       if( func1.num_params()==2)
@@ -187,9 +188,29 @@ int main(int argc, char **argv){
  
     exit(0);
   }
+  catch(timeable::BAD_LIBM &){
+    std::cerr << "Loading of libm implementation failed: " << std::endl
+	      << dlerror() << std::endl;
+    exit(1);
+  }
+  catch(timeable::BAD_FNAME &){
+    std::cerr << "Could not locate the function "
+	      << (altfname!=NULL?altfname:funcname) << ' '
+	      << dlerror() << std::endl;
+    exit(1);
+  }
+  catch(timeable::BAD_FUNC &){
+    std::cerr << "Unknown function " << (altfname!=NULL?altfname:funcname)
+	      << std::endl;
+    exit(1);
+  }
   catch(parameters_t::BAD_NUMFILE){
     std::cerr << "Problem reading test cases from " << argv[optind]
 	      << std::endl << std::strerror(errno) << std::endl;
+    exit(1);
+  }
+  catch(parameters_t::NO_NUMBERS){
+    std::cerr << "No numbers found to make ranges." << std::endl;
     exit(1);
   }
 }
